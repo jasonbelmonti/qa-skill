@@ -40,13 +40,12 @@ export async function prepareOutputDirectory(outDir: string): Promise<string> {
           `Unable to create output directory: ${resolvedOutDir}`,
         );
       }
-      return resolvedOutDir;
+    } else {
+      throw new CliError(
+        "ARTIFACT_WRITE_ERROR",
+        `Unable to access output directory: ${resolvedOutDir}`,
+      );
     }
-
-    throw new CliError(
-      "ARTIFACT_WRITE_ERROR",
-      `Unable to access output directory: ${resolvedOutDir}`,
-    );
   }
 
   try {

@@ -1,5 +1,5 @@
 import { basename, resolve } from "node:path";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 
 import type { QaRunConfigV1 } from "../../contracts/config";
 import type {
@@ -158,6 +158,23 @@ export async function normalizeConfigToSkillInput(
     throw new CliError(
       "CONFIG_VALIDATION_ERROR",
       `repoRoot does not exist or is not accessible: ${repoRootInput}`,
+    );
+  }
+
+  let repoRootStats: Awaited<ReturnType<typeof stat>>;
+  try {
+    repoRootStats = await stat(normalizedRepoRoot);
+  } catch {
+    throw new CliError(
+      "CONFIG_VALIDATION_ERROR",
+      `repoRoot does not exist or is not accessible: ${repoRootInput}`,
+    );
+  }
+
+  if (!repoRootStats.isDirectory()) {
+    throw new CliError(
+      "CONFIG_VALIDATION_ERROR",
+      `repoRoot is not a directory: ${repoRootInput}`,
     );
   }
 
