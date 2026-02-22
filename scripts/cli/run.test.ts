@@ -116,8 +116,8 @@ test("qa:run returns usage error when required args are missing", () => {
   const result = runQa([]);
 
   expect(result.exitCode).toBe(2);
-  const stderrPayload = parseJsonLine(result.stderr);
-  expect(stderrPayload.code).toBe("USAGE_ERROR");
+  const stdoutPayload = parseJsonLine(result.stdout);
+  expect(stdoutPayload.code).toBe("USAGE_ERROR");
 });
 
 test("qa:run returns parse error for invalid JSON config", async () => {
@@ -129,8 +129,8 @@ test("qa:run returns parse error for invalid JSON config", async () => {
     const result = runQa(["--config", configPath, "--out", outPath]);
     expect(result.exitCode).toBe(3);
 
-    const stderrPayload = parseJsonLine(result.stderr);
-    expect(stderrPayload.code).toBe("CONFIG_PARSE_ERROR");
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("CONFIG_PARSE_ERROR");
   });
 });
 
@@ -143,8 +143,8 @@ test("qa:run returns validation error for invalid config values", async () => {
     const result = runQa(["--config", configPath, "--out", outPath]);
     expect(result.exitCode).toBe(3);
 
-    const stderrPayload = parseJsonLine(result.stderr);
-    expect(stderrPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("CONFIG_VALIDATION_ERROR");
   });
 });
 
@@ -157,8 +157,8 @@ test("qa:run returns validation error for non-positive maxConcurrency", async ()
     const result = runQa(["--config", configPath, "--out", outPath]);
     expect(result.exitCode).toBe(3);
 
-    const stderrPayload = parseJsonLine(result.stderr);
-    expect(stderrPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("CONFIG_VALIDATION_ERROR");
   });
 });
 
@@ -174,8 +174,8 @@ test("qa:run returns error when output directory is non-empty", async () => {
     const result = runQa(["--config", configPath, "--out", outPath]);
     expect(result.exitCode).toBe(4);
 
-    const stderrPayload = parseJsonLine(result.stderr);
-    expect(stderrPayload.code).toBe("OUT_DIR_NON_EMPTY");
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("OUT_DIR_NON_EMPTY");
   });
 });
 
@@ -194,7 +194,34 @@ test("qa:run returns usage error for unknown flags", async () => {
     ]);
 
     expect(result.exitCode).toBe(2);
-    const stderrPayload = parseJsonLine(result.stderr);
-    expect(stderrPayload.code).toBe("USAGE_ERROR");
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("USAGE_ERROR");
+  });
+});
+
+test("qa:run returns read error for missing config file", async () => {
+  await withTempDir(async (tempDir) => {
+    const missingConfigPath = join(tempDir, "missing-config.json");
+    const outPath = join(tempDir, "run-a");
+
+    const result = runQa(["--config", missingConfigPath, "--out", outPath]);
+    expect(result.exitCode).toBe(3);
+
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("CONFIG_READ_ERROR");
+  });
+});
+
+test("qa:run returns validation error for invalid repoRoot path", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(configPath, '{"repoRoot":"/definitely/not/here"}\n', "utf8");
+
+    const result = runQa(["--config", configPath, "--out", outPath]);
+    expect(result.exitCode).toBe(3);
+
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("CONFIG_VALIDATION_ERROR");
   });
 });

@@ -80,6 +80,21 @@ test("normalizeConfigToSkillInput is deterministic for equal input", async () =>
   expect(a.configHash).toBe(b.configHash);
 });
 
+test("normalizeConfigToSkillInput preserves explicit null cost budget", async () => {
+  const normalized = await normalizeConfigToSkillInput(
+    {
+      runBudgetMaxCostUsd: null,
+    },
+    {
+      cwd: "/tmp/qa-skill",
+      resolveRealpath: async (path) => path,
+      getOriginRemoteUrl: async () => null,
+    },
+  );
+
+  expect(normalized.runBudgetMaxCostUsd).toBeNull();
+});
+
 test("normalizeConfigToSkillInput fails when defaultPermissionProfileId is missing", async () => {
   try {
     await normalizeConfigToSkillInput(

@@ -79,8 +79,9 @@ export function deriveRepoIdFromRemoteUrl(
     const trimmed = remoteUrl.trim();
 
     const scpLikeMatch = trimmed.match(/^[^@]+@[^:]+:(.+)$/);
-    if (scpLikeMatch) {
-      const parsed = normalizeRemotePath(scpLikeMatch[1]);
+    const scpPath = scpLikeMatch?.[1];
+    if (scpPath) {
+      const parsed = normalizeRemotePath(scpPath);
       if (parsed) {
         return parsed;
       }
@@ -154,9 +155,22 @@ export async function normalizeConfigToSkillInput(
     options.getOriginRemoteUrl ?? defaultGetOriginRemoteUrl;
 
   const repoRootInput = resolve(cwd, config.repoRoot ?? ".");
-  const normalizedRepoRoot = await resolveRealpath(repoRootInput);
+  let normalizedRepoRoot: string;
+  try {
+    normalizedRepoRoot = await resolveRealpath(repoRootInput);
+  } catch {
+    throw new CliError(
+      "CONFIG_VALIDATION_ERROR",
+      `repoRoot does not exist or is not accessible: ${repoRootInput}`,
+    );
+  }
 
-  const remoteUrl = await getOriginRemoteUrl(normalizedRepoRoot);
+  let remoteUrl: string | null = null;
+  try {
+    remoteUrl = await getOriginRemoteUrl(normalizedRepoRoot);
+  } catch {
+    remoteUrl = null;
+  }
   const repoId =
     config.repoId ?? deriveRepoIdFromRemoteUrl(remoteUrl, normalizedRepoRoot);
 

@@ -83,7 +83,7 @@ export async function runCli(args: string[]): Promise<number> {
     return 0;
   } catch (error) {
     const cliError = toCliError(error);
-    process.stderr.write(formatCliErrorLine(cliError));
+    process.stdout.write(formatCliErrorLine(cliError));
     return cliError.exitCode;
   }
 }

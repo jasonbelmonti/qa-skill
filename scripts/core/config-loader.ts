@@ -49,65 +49,65 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
-function ensure(
-  condition: boolean,
-  message: string,
-): asserts condition is true {
-  if (!condition) {
-    throw new CliError("CONFIG_VALIDATION_ERROR", message);
-  }
+function failValidation(message: string): never {
+  throw new CliError("CONFIG_VALIDATION_ERROR", message);
 }
 
-function asString(value: unknown, field: string): string {
-  ensure(typeof value === "string", `${field} must be a string`);
-  ensure(value.length > 0, `${field} must not be empty`);
+function expectString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    failValidation(`${field} must be a non-empty string`);
+  }
   return value;
 }
 
-function asOptionalString(value: unknown, field: string): string | undefined {
+function expectOptionalString(value: unknown, field: string): string | undefined {
   if (value === undefined) {
     return undefined;
   }
-  return asString(value, field);
+  return expectString(value, field);
 }
 
-function asOptionalNullableString(
+function expectOptionalNullableString(
   value: unknown,
   field: string,
 ): string | null | undefined {
   if (value === undefined || value === null) {
     return value;
   }
-  return asString(value, field);
+  return expectString(value, field);
 }
 
-function asPositiveInteger(value: unknown, field: string): number {
-  ensure(
-    typeof value === "number" && Number.isInteger(value) && value > 0,
-    `${field} must be a positive integer`,
-  );
+function expectPositiveInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    failValidation(`${field} must be a positive integer`);
+  }
   return value;
 }
 
-function asNonNegativeInteger(value: unknown, field: string): number {
-  ensure(
-    typeof value === "number" && Number.isInteger(value) && value >= 0,
-    `${field} must be a non-negative integer`,
-  );
+function expectNonNegativeInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    failValidation(`${field} must be a non-negative integer`);
+  }
   return value;
 }
 
-function asOptionalNullableNumber(
+function expectOptionalNullableNumber(
   value: unknown,
   field: string,
 ): number | null | undefined {
   if (value === undefined || value === null) {
     return value;
   }
-  ensure(
-    typeof value === "number" && Number.isFinite(value) && value >= 0,
-    `${field} must be a non-negative finite number or null`,
-  );
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    failValidation(`${field} must be a non-negative finite number or null`);
+  }
+  return value;
+}
+
+function expectArray(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value)) {
+    failValidation(`${field} must be an array`);
+  }
   return value;
 }
 
@@ -115,9 +115,10 @@ function validateRequestedLensIds(value: unknown): string[] | null | undefined {
   if (value === undefined || value === null) {
     return value;
   }
-  ensure(Array.isArray(value), "requestedLensIds must be an array or null");
-  return value.map((item, index) =>
-    asString(item, `requestedLensIds[${index}]`),
+
+  const entries = expectArray(value, "requestedLensIds");
+  return entries.map((item, index) =>
+    expectString(item, `requestedLensIds[${index}]`),
   );
 }
 
@@ -125,13 +126,13 @@ function validateLensClasses(value: unknown): LensClass[] | undefined {
   if (value === undefined) {
     return undefined;
   }
-  ensure(Array.isArray(value), "allowExecutionLensClasses must be an array");
-  return value.map((item, index) => {
-    const lensClass = asString(item, `allowExecutionLensClasses[${index}]`);
-    ensure(
-      LENS_CLASSES.includes(lensClass as LensClass),
-      `allowExecutionLensClasses[${index}] is invalid`,
-    );
+
+  const entries = expectArray(value, "allowExecutionLensClasses");
+  return entries.map((item, index) => {
+    const lensClass = expectString(item, `allowExecutionLensClasses[${index}]`);
+    if (!LENS_CLASSES.includes(lensClass as LensClass)) {
+      failValidation(`allowExecutionLensClasses[${index}] is invalid`);
+    }
     return lensClass as LensClass;
   });
 }
@@ -139,17 +140,11 @@ function validateLensClasses(value: unknown): LensClass[] | undefined {
 function validateAllowedCommandPrefixes(
   value: unknown,
 ): PermissionProfile["allowedCommandPrefixes"] {
-  ensure(Array.isArray(value), "allowedCommandPrefixes must be an array");
-  return value.map((prefix, prefixIndex) => {
-    ensure(
-      Array.isArray(prefix),
-      `allowedCommandPrefixes[${prefixIndex}] must be an array`,
-    );
-    return prefix.map((token, tokenIndex) =>
-      asString(
-        token,
-        `allowedCommandPrefixes[${prefixIndex}][${tokenIndex}]`,
-      ),
+  const prefixes = expectArray(value, "allowedCommandPrefixes");
+  return prefixes.map((prefix, prefixIndex) => {
+    const tokens = expectArray(prefix, `allowedCommandPrefixes[${prefixIndex}]`);
+    return tokens.map((token, tokenIndex) =>
+      expectString(token, `allowedCommandPrefixes[${prefixIndex}][${tokenIndex}]`),
     );
   });
 }
@@ -160,15 +155,15 @@ function validatePermissionProfiles(
   if (value === undefined) {
     return undefined;
   }
-  ensure(Array.isArray(value), "permissionProfiles must be an array");
 
-  return value.map((profile, index) => {
-    ensure(
-      isPlainObject(profile),
-      `permissionProfiles[${index}] must be an object`,
-    );
+  const profiles = expectArray(value, "permissionProfiles");
 
-    const keys = Object.keys(profile);
+  return profiles.map((profileRaw, index) => {
+    if (!isPlainObject(profileRaw)) {
+      failValidation(`permissionProfiles[${index}] must be an object`);
+    }
+    const profile = profileRaw;
+
     const allowedKeys = new Set([
       "profileId",
       "readOnly",
@@ -180,58 +175,56 @@ function validatePermissionProfiles(
       "maxStdoutBytes",
       "maxStderrBytes",
     ]);
-    for (const key of keys) {
-      ensure(
-        allowedKeys.has(key),
-        `permissionProfiles[${index}] contains unknown key: ${key}`,
-      );
+    for (const key of Object.keys(profile)) {
+      if (!allowedKeys.has(key)) {
+        failValidation(`permissionProfiles[${index}] contains unknown key: ${key}`);
+      }
     }
 
-    const profileId = asString(profile.profileId, `permissionProfiles[${index}].profileId`);
-    ensure(
-      PERMISSION_PROFILE_IDS.includes(profileId as PermissionProfileId),
-      `permissionProfiles[${index}].profileId is invalid`,
+    const profileId = expectString(
+      profile.profileId,
+      `permissionProfiles[${index}].profileId`,
     );
+    if (!PERMISSION_PROFILE_IDS.includes(profileId as PermissionProfileId)) {
+      failValidation(`permissionProfiles[${index}].profileId is invalid`);
+    }
 
-    ensure(
-      typeof profile.readOnly === "boolean",
-      `permissionProfiles[${index}].readOnly must be boolean`,
-    );
-    ensure(
-      typeof profile.allowNetwork === "boolean",
-      `permissionProfiles[${index}].allowNetwork must be boolean`,
-    );
+    if (typeof profile.readOnly !== "boolean") {
+      failValidation(`permissionProfiles[${index}].readOnly must be boolean`);
+    }
+    if (typeof profile.allowNetwork !== "boolean") {
+      failValidation(`permissionProfiles[${index}].allowNetwork must be boolean`);
+    }
 
-    const worktreeMode = asString(
+    const worktreeModeRaw = expectString(
       profile.worktreeMode,
       `permissionProfiles[${index}].worktreeMode`,
     );
-    ensure(
-      worktreeMode === "none" || worktreeMode === "ephemeral",
-      `permissionProfiles[${index}].worktreeMode is invalid`,
-    );
+    if (worktreeModeRaw !== "none" && worktreeModeRaw !== "ephemeral") {
+      failValidation(`permissionProfiles[${index}].worktreeMode is invalid`);
+    }
 
     return {
       profileId: profileId as PermissionProfileId,
       readOnly: profile.readOnly,
       allowNetwork: profile.allowNetwork,
-      worktreeMode,
+      worktreeMode: worktreeModeRaw,
       allowedCommandPrefixes: validateAllowedCommandPrefixes(
         profile.allowedCommandPrefixes,
       ),
-      maxCommandsPerPlan: asNonNegativeInteger(
+      maxCommandsPerPlan: expectNonNegativeInteger(
         profile.maxCommandsPerPlan,
         `permissionProfiles[${index}].maxCommandsPerPlan`,
       ),
-      commandTimeoutMs: asNonNegativeInteger(
+      commandTimeoutMs: expectNonNegativeInteger(
         profile.commandTimeoutMs,
         `permissionProfiles[${index}].commandTimeoutMs`,
       ),
-      maxStdoutBytes: asNonNegativeInteger(
+      maxStdoutBytes: expectNonNegativeInteger(
         profile.maxStdoutBytes,
         `permissionProfiles[${index}].maxStdoutBytes`,
       ),
-      maxStderrBytes: asNonNegativeInteger(
+      maxStderrBytes: expectNonNegativeInteger(
         profile.maxStderrBytes,
         `permissionProfiles[${index}].maxStderrBytes`,
       ),
@@ -243,15 +236,15 @@ function validateProviderBindings(value: unknown): ProviderBinding[] | undefined
   if (value === undefined) {
     return undefined;
   }
-  ensure(Array.isArray(value), "providerBindings must be an array");
 
-  return value.map((binding, index) => {
-    ensure(
-      isPlainObject(binding),
-      `providerBindings[${index}] must be an object`,
-    );
+  const bindings = expectArray(value, "providerBindings");
 
-    const keys = Object.keys(binding);
+  return bindings.map((bindingRaw, index) => {
+    if (!isPlainObject(bindingRaw)) {
+      failValidation(`providerBindings[${index}] must be an object`);
+    }
+    const binding = bindingRaw;
+
     const allowedKeys = new Set([
       "bindingId",
       "adapterId",
@@ -265,70 +258,68 @@ function validateProviderBindings(value: unknown): ProviderBinding[] | undefined
       "retryMax",
       "retryBackoffMs",
     ]);
-    for (const key of keys) {
-      ensure(
-        allowedKeys.has(key),
-        `providerBindings[${index}] contains unknown key: ${key}`,
-      );
+    for (const key of Object.keys(binding)) {
+      if (!allowedKeys.has(key)) {
+        failValidation(`providerBindings[${index}] contains unknown key: ${key}`);
+      }
     }
 
-    const adapterId = asString(
+    const adapterId = expectString(
       binding.adapterId,
       `providerBindings[${index}].adapterId`,
     );
-    ensure(
-      adapterId === "openai-codex" || adapterId === "anthropic-claude",
-      `providerBindings[${index}].adapterId is invalid`,
-    );
+    if (adapterId !== "openai-codex" && adapterId !== "anthropic-claude") {
+      failValidation(`providerBindings[${index}].adapterId is invalid`);
+    }
 
-    ensure(
-      binding.temperature === 0,
-      `providerBindings[${index}].temperature must be 0`,
-    );
-    ensure(
-      binding.topP === 1,
-      `providerBindings[${index}].topP must be 1`,
-    );
+    if (binding.temperature !== 0) {
+      failValidation(`providerBindings[${index}].temperature must be 0`);
+    }
+    if (binding.topP !== 1) {
+      failValidation(`providerBindings[${index}].topP must be 1`);
+    }
 
     const seed = binding.seed;
-    ensure(
-      seed === null || (typeof seed === "number" && Number.isInteger(seed)),
-      `providerBindings[${index}].seed must be an integer or null`,
-    );
+    if (seed !== null && (typeof seed !== "number" || !Number.isInteger(seed))) {
+      failValidation(`providerBindings[${index}].seed must be an integer or null`);
+    }
 
-    const retryMax = asNonNegativeInteger(
+    const retryMax = expectNonNegativeInteger(
       binding.retryMax,
       `providerBindings[${index}].retryMax`,
     );
-    ensure(
-      retryMax === 2,
-      `providerBindings[${index}].retryMax must be 2`,
-    );
+    if (retryMax !== 2) {
+      failValidation(`providerBindings[${index}].retryMax must be 2`);
+    }
 
-    ensure(
-      Array.isArray(binding.retryBackoffMs) &&
-        binding.retryBackoffMs.length === 2 &&
-        binding.retryBackoffMs[0] === 500 &&
-        binding.retryBackoffMs[1] === 1500,
-      `providerBindings[${index}].retryBackoffMs must equal [500,1500]`,
-    );
+    if (
+      !Array.isArray(binding.retryBackoffMs) ||
+      binding.retryBackoffMs.length !== 2 ||
+      binding.retryBackoffMs[0] !== 500 ||
+      binding.retryBackoffMs[1] !== 1500
+    ) {
+      failValidation(`providerBindings[${index}].retryBackoffMs must equal [500,1500]`);
+    }
 
     return {
-      bindingId: asString(binding.bindingId, `providerBindings[${index}].bindingId`),
+      bindingId: expectString(
+        binding.bindingId,
+        `providerBindings[${index}].bindingId`,
+      ),
       adapterId: adapterId as ProviderBinding["adapterId"],
-      adapterVersion: asString(
+      adapterVersion: expectString(
         binding.adapterVersion,
         `providerBindings[${index}].adapterVersion`,
       ),
-      modelId: asString(binding.modelId, `providerBindings[${index}].modelId`),
+      modelId: expectString(binding.modelId, `providerBindings[${index}].modelId`),
       temperature: 0,
       topP: 1,
-      maxTokens: asPositiveInteger(
+      maxTokens: expectPositiveInteger(
         binding.maxTokens,
         `providerBindings[${index}].maxTokens`,
       ),
       seed,
-      timeoutMs: asPositiveInteger(
+      timeoutMs: expectPositiveInteger(
         binding.timeoutMs,
         `providerBindings[${index}].timeoutMs`,
       ),
@@ -339,88 +330,89 @@ function validateProviderBindings(value: unknown): ProviderBinding[] | undefined
 }
 
 export function validateQaRunConfigV1(raw: unknown): QaRunConfigV1 {
-  ensure(isPlainObject(raw), "Config root must be a JSON object");
+  if (!isPlainObject(raw)) {
+    failValidation("Config root must be a JSON object");
+  }
+  const config = raw;
 
-  for (const key of Object.keys(raw)) {
-    ensure(ALLOWED_TOP_LEVEL_KEYS.has(key), `Unknown config key: ${key}`);
+  for (const key of Object.keys(config)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(key)) {
+      failValidation(`Unknown config key: ${key}`);
+    }
   }
 
-  const schemaVersion = raw.schemaVersion;
-  if (schemaVersion !== undefined) {
-    ensure(
-      schemaVersion === "qa-run-config.v1",
-      "schemaVersion must be qa-run-config.v1",
-    );
+  const schemaVersion = config.schemaVersion;
+  if (schemaVersion !== undefined && schemaVersion !== "qa-run-config.v1") {
+    failValidation("schemaVersion must be qa-run-config.v1");
   }
 
-  const runMode = raw.runMode;
+  const runMode = config.runMode;
   if (runMode !== undefined) {
-    const parsedRunMode = asString(runMode, "runMode");
-    ensure(RUN_MODES.includes(parsedRunMode as RunMode), "runMode is invalid");
+    const parsedRunMode = expectString(runMode, "runMode");
+    if (!RUN_MODES.includes(parsedRunMode as RunMode)) {
+      failValidation("runMode is invalid");
+    }
   }
 
-  const defaultPermissionProfileId = raw.defaultPermissionProfileId;
+  const defaultPermissionProfileId = config.defaultPermissionProfileId;
   if (defaultPermissionProfileId !== undefined) {
-    const parsedDefaultProfileId = asString(
+    const parsedDefaultProfileId = expectString(
       defaultPermissionProfileId,
       "defaultPermissionProfileId",
     );
-    ensure(
-      PERMISSION_PROFILE_IDS.includes(parsedDefaultProfileId as PermissionProfileId),
-      "defaultPermissionProfileId is invalid",
-    );
+    if (!PERMISSION_PROFILE_IDS.includes(parsedDefaultProfileId as PermissionProfileId)) {
+      failValidation("defaultPermissionProfileId is invalid");
+    }
   }
 
-  const maxConcurrency = raw.maxConcurrency;
-  if (maxConcurrency !== undefined) {
-    asPositiveInteger(maxConcurrency, "maxConcurrency");
+  if (config.maxConcurrency !== undefined) {
+    expectPositiveInteger(config.maxConcurrency, "maxConcurrency");
   }
 
-  const runBudgetMaxTokens = raw.runBudgetMaxTokens;
-  if (runBudgetMaxTokens !== undefined) {
-    asPositiveInteger(runBudgetMaxTokens, "runBudgetMaxTokens");
+  if (config.runBudgetMaxTokens !== undefined) {
+    expectPositiveInteger(config.runBudgetMaxTokens, "runBudgetMaxTokens");
   }
 
-  if (raw.repoId !== undefined) {
-    asString(raw.repoId, "repoId");
+  if (config.repoId !== undefined) {
+    expectString(config.repoId, "repoId");
   }
-  if (raw.repoRoot !== undefined) {
-    asString(raw.repoRoot, "repoRoot");
+  if (config.repoRoot !== undefined) {
+    expectString(config.repoRoot, "repoRoot");
   }
-  if (raw.headRef !== undefined) {
-    asString(raw.headRef, "headRef");
+  if (config.headRef !== undefined) {
+    expectString(config.headRef, "headRef");
   }
-  if (raw.baseRef !== undefined && raw.baseRef !== null) {
-    asString(raw.baseRef, "baseRef");
+  if (config.baseRef !== undefined && config.baseRef !== null) {
+    expectString(config.baseRef, "baseRef");
   }
-  if (raw.artifactRoot !== undefined) {
-    asString(raw.artifactRoot, "artifactRoot");
+  if (config.artifactRoot !== undefined) {
+    expectString(config.artifactRoot, "artifactRoot");
   }
 
-  const parsedRequestedLensIds = validateRequestedLensIds(raw.requestedLensIds);
-  const parsedLensClasses = validateLensClasses(raw.allowExecutionLensClasses);
-  const parsedPermissionProfiles = validatePermissionProfiles(raw.permissionProfiles);
-  const parsedProviderBindings = validateProviderBindings(raw.providerBindings);
-  const parsedCostBudget = asOptionalNullableNumber(
-    raw.runBudgetMaxCostUsd,
+  const parsedRequestedLensIds = validateRequestedLensIds(config.requestedLensIds);
+  const parsedLensClasses = validateLensClasses(config.allowExecutionLensClasses);
+  const parsedPermissionProfiles = validatePermissionProfiles(config.permissionProfiles);
+  const parsedProviderBindings = validateProviderBindings(config.providerBindings);
+  const parsedCostBudget = expectOptionalNullableNumber(
+    config.runBudgetMaxCostUsd,
     "runBudgetMaxCostUsd",
   );
 
   return {
     schemaVersion: schemaVersion as QaRunConfigV1["schemaVersion"],
-    repoId: asOptionalString(raw.repoId, "repoId"),
-    repoRoot: asOptionalString(raw.repoRoot, "repoRoot"),
-    baseRef: asOptionalNullableString(raw.baseRef, "baseRef"),
-    headRef: asOptionalString(raw.headRef, "headRef"),
+    repoId: expectOptionalString(config.repoId, "repoId"),
+    repoRoot: expectOptionalString(config.repoRoot, "repoRoot"),
+    baseRef: expectOptionalNullableString(config.baseRef, "baseRef"),
+    headRef: expectOptionalString(config.headRef, "headRef"),
     runMode: runMode as QaRunConfigV1["runMode"],
     requestedLensIds: parsedRequestedLensIds,
-    maxConcurrency: maxConcurrency as number | undefined,
+    maxConcurrency: config.maxConcurrency as number | undefined,
     allowExecutionLensClasses: parsedLensClasses,
     permissionProfiles: parsedPermissionProfiles,
     defaultPermissionProfileId:
       defaultPermissionProfileId as QaRunConfigV1["defaultPermissionProfileId"],
-    artifactRoot: asOptionalString(raw.artifactRoot, "artifactRoot"),
-    runBudgetMaxTokens: runBudgetMaxTokens as number | undefined,
+    artifactRoot: expectOptionalString(config.artifactRoot, "artifactRoot"),
+    runBudgetMaxTokens: config.runBudgetMaxTokens as number | undefined,
     runBudgetMaxCostUsd: parsedCostBudget,
     providerBindings: parsedProviderBindings,
   };
