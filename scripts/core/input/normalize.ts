@@ -68,6 +68,34 @@ function normalizeRemotePath(pathValue: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function sanitizeRepoIdCandidate(value: string): string {
+  return value
+    .trim()
+    .replace(/[:\\/]+/g, "-")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function deriveRepoIdFromRepoRoot(repoRoot: string): string {
+  const trimmedRoot = repoRoot.trim().replace(/[\\/]+$/g, "");
+
+  const base = basename(trimmedRoot);
+  const sanitizedBase = sanitizeRepoIdCandidate(base);
+  if (sanitizedBase.length > 0) {
+    return sanitizedBase;
+  }
+
+  const sanitizedRoot = sanitizeRepoIdCandidate(
+    trimmedRoot.replace(/^[\\/]+/, ""),
+  );
+
+  if (sanitizedRoot.length > 0) {
+    return sanitizedRoot;
+  }
+
+  return "repo-root";
+}
+
 export function deriveRepoIdFromRemoteUrl(
   remoteUrl: string | null,
   repoRoot: string,
@@ -98,7 +126,7 @@ export function deriveRepoIdFromRemoteUrl(
     }
   }
 
-  return basename(repoRoot);
+  return deriveRepoIdFromRepoRoot(repoRoot);
 }
 
 export async function defaultGetOriginRemoteUrl(

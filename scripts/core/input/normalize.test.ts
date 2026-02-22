@@ -57,6 +57,14 @@ test("deriveRepoIdFromRemoteUrl falls back to repo directory when remote is unav
   expect(deriveRepoIdFromRemoteUrl(null, "/tmp/qa-skill")).toBe("qa-skill");
 });
 
+test("deriveRepoIdFromRemoteUrl falls back to deterministic value for posix root", () => {
+  expect(deriveRepoIdFromRemoteUrl(null, "/")).toBe("repo-root");
+});
+
+test("deriveRepoIdFromRemoteUrl falls back to deterministic value for windows drive root", () => {
+  expect(deriveRepoIdFromRemoteUrl(null, "C:\\")).toBe("C");
+});
+
 test("normalizeConfigToSkillInput applies deterministic defaults", async () => {
   await withTempDir(async (testDir) => {
     const expectedRepoRoot = await realpath(testDir);
@@ -130,24 +138,25 @@ test("normalizeConfigToSkillInput preserves explicit null cost budget", async ()
 });
 
 test("normalizeConfigToSkillInput fails when defaultPermissionProfileId is missing", async () => {
-  try {
-    await normalizeConfigToSkillInput(
-      {
-        permissionProfiles: [DEFAULT_READ_ONLY_PERMISSION_PROFILE],
-        defaultPermissionProfileId: "exec_sandboxed",
-      },
-      {
-        cwd: "/tmp/qa-skill",
-        resolveRealpath: async (path) => path,
-        getOriginRemoteUrl: async () => null,
-      },
-    );
-    throw new Error("Expected normalizeConfigToSkillInput to throw");
-  } catch (error) {
-    expect(error).toBeInstanceOf(CliError);
-    const cliError = error as CliError;
-    expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
-  }
+  await withTempDir(async (testDir) => {
+    try {
+      await normalizeConfigToSkillInput(
+        {
+          permissionProfiles: [DEFAULT_READ_ONLY_PERMISSION_PROFILE],
+          defaultPermissionProfileId: "exec_sandboxed",
+        },
+        {
+          cwd: testDir,
+          getOriginRemoteUrl: async () => null,
+        },
+      );
+      throw new Error("Expected normalizeConfigToSkillInput to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
+    }
+  });
 });
 
 test("normalizeConfigToSkillInput rejects repoRoot values that resolve to files", async () => {
