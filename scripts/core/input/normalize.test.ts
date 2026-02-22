@@ -35,6 +35,24 @@ test("deriveRepoIdFromRemoteUrl handles ssh remotes", () => {
   ).toBe("jasonbelmonti/qa-skill");
 });
 
+test("deriveRepoIdFromRemoteUrl normalizes .git/ suffix for https remotes", () => {
+  expect(
+    deriveRepoIdFromRemoteUrl(
+      "https://github.com/jasonbelmonti/qa-skill.git/",
+      "/tmp/qa-skill",
+    ),
+  ).toBe("jasonbelmonti/qa-skill");
+});
+
+test("deriveRepoIdFromRemoteUrl normalizes .git/ suffix for ssh remotes", () => {
+  expect(
+    deriveRepoIdFromRemoteUrl(
+      "git@github.com:jasonbelmonti/qa-skill.git/",
+      "/tmp/qa-skill",
+    ),
+  ).toBe("jasonbelmonti/qa-skill");
+});
+
 test("deriveRepoIdFromRemoteUrl falls back to repo directory when remote is unavailable", () => {
   expect(deriveRepoIdFromRemoteUrl(null, "/tmp/qa-skill")).toBe("qa-skill");
 });

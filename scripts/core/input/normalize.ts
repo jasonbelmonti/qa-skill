@@ -61,8 +61,9 @@ function cloneProviderBinding(binding: ProviderBinding): ProviderBinding {
 function normalizeRemotePath(pathValue: string): string | null {
   const trimmed = pathValue
     .trim()
-    .replace(/\.git$/, "")
     .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "")
     .replace(/\/+$/, "");
   return trimmed.length > 0 ? trimmed : null;
 }

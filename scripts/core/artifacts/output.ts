@@ -78,8 +78,15 @@ export async function writeNormalizedInputArtifact(
   const content = `${stableStringify(input, { pretty: true })}\n`;
 
   try {
-    await writeFile(artifactPath, content, "utf8");
-  } catch {
+    await writeFile(artifactPath, content, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if (hasErrorCode(error, "EEXIST")) {
+      throw new CliError(
+        "OUT_DIR_NON_EMPTY",
+        `Output artifact already exists: ${artifactPath}`,
+      );
+    }
+
     throw new CliError(
       "ARTIFACT_WRITE_ERROR",
       `Unable to write artifact file: ${artifactPath}`,
