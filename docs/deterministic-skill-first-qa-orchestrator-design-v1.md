@@ -1,7 +1,7 @@
 # Deterministic Skill-First QA Orchestrator Design (v1)
 
 ## Summary
-This design defines a Skill-first, diff-driven QA orchestrator implemented in TypeScript under `/scripts`, with pluggable lenses, provider adapters for Claude/Codex-compatible execution, deterministic `PASS|FAIL` semantics, strict schema versioning, and deterministic artifacts written to `.qa-skill`.
+This design defines a Skill-first, diff-driven QA orchestrator implemented in TypeScript under `/scripts`, with pluggable lenses, provider adapters for Claude/Codex-compatible execution, deterministic `PASS|FAIL` semantics, strict schema versioning, deterministic artifacts written to `.qa-skill`, and an explicit opt-in permission model for execution-enabled analyses.
 
 Defaults selected:
 - Runtime: Bun-first
@@ -9,6 +9,7 @@ Defaults selected:
 - Artifact root: `.qa-skill`
 - Consistency baseline: hybrid bootstrap + human freeze
 - Blocking policy: rule-defined
+- Execution default: read-only (`read_only` permission profile)
 
 ## Module Layout
 1. Skill metadata and spec-facing manifest files live at `SKILL.md` and `skill/manifest.v1.json`.
@@ -27,6 +28,9 @@ Defaults selected:
 14. Consistency lens implementation lives at `scripts/lenses/consistency/index.ts` with rubric files in `scripts/lenses/consistency/rubric/`.
 15. Versioned JSON schemas live at `schemas/v1/`.
 16. Runtime artifacts are emitted under `.qa-skill/runs/<executionKey>/`.
+17. Permission profiles and policy evaluator live at `scripts/security/permissions.ts`.
+18. Execution runner and sandbox/worktree manager live at `scripts/core/execution-runner.ts`.
+19. Execution audit schema lives at `schemas/v1/execution-audit.v1.json`.
 
 ## End-to-End Flow
 1. Resolve `baseRef` deterministically in this exact order: configured `baseRef`, `origin/HEAD`, `origin/main`, `origin/master`, else fail with deterministic code.
@@ -34,10 +38,11 @@ Defaults selected:
 3. Select minimal relevant lenses and sub-lenses from registry triggers; fallback to broader scan only when deterministic confidence score is below threshold.
 4. Build bounded context packets from diff hunks first; load full-file context only when lens policy requires it.
 5. Generate deterministic `LensPlan[]` in stable order and dispatch with fixed concurrency.
-6. Execute sub-agents via provider adapters in read-only mode by default; execution-enabled only for explicitly allowlisted lens classes.
-7. Normalize provider responses into `LensResult[]`, map errors to deterministic codes, and preserve stable ordering.
-8. Aggregate findings with deterministic conflict resolution and emit `FinalVerdict`.
-9. Write versioned artifacts and hashes, then optionally run determinism drift verification.
+6. Evaluate lens permission profile; enforce read-only by default and only allow execution for explicitly allowlisted lens classes plus non-read-only profiles.
+7. For execution-enabled plans, run deterministic command specs in sandboxed worktrees and capture execution audit artifacts.
+8. Normalize provider and execution responses into `LensResult[]`, map errors to deterministic codes, and preserve stable ordering.
+9. Aggregate findings with deterministic conflict resolution and emit `FinalVerdict`.
+10. Write versioned artifacts and hashes, then optionally run determinism drift verification.
 
 ## Public APIs and Contracts (Strict Types)
 ```ts
@@ -46,13 +51,15 @@ export type SchemaVersion =
   | "skill-result.v1"
   | "lens-plan.v1"
   | "lens-result.v1"
-  | "final-verdict.v1";
+  | "final-verdict.v1"
+  | "execution-audit.v1";
 
 export type RunMode = "strict" | "best_effort";
 export type VerdictStatus = "PASS" | "FAIL";
 export type LensClass = "consistency" | "security" | "architecture" | "style" | "performance";
 export type LensStatus = "completed" | "degraded" | "failed" | "skipped";
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
+export type PermissionProfileId = "read_only" | "exec_sandboxed" | "exec_sandboxed_network_off";
 export type UsageUnavailableReason =
   | "PROVIDER_NOT_SUPPORTED"
   | "MISSING_USAGE_DATA"
@@ -72,6 +79,11 @@ export type ErrorCode =
   | "PROVIDER_AUTH_ERROR"
   | "PROVIDER_UNAVAILABLE"
   | "PROVIDER_USAGE_UNAVAILABLE"
+  | "EXECUTION_DENIED"
+  | "EXECUTION_POLICY_VIOLATION"
+  | "EXECUTION_TIMEOUT"
+  | "EXECUTION_EXIT_NONZERO"
+  | "EXECUTION_AUDIT_UNAVAILABLE"
   | "LENS_REQUIRED_MISSING"
   | "LENS_REQUIRED_FAILED"
   | "BUDGET_RUN_EXCEEDED"
@@ -101,6 +113,40 @@ export interface ProviderBinding {
   retryBackoffMs: readonly [500, 1500];
 }
 
+export interface PermissionProfile {
+  profileId: PermissionProfileId;
+  readOnly: boolean;
+  allowNetwork: boolean;
+  worktreeMode: "none" | "ephemeral";
+  allowedCommandPrefixes: string[][];
+  maxCommandsPerPlan: number;
+  commandTimeoutMs: number;
+  maxStdoutBytes: number;
+  maxStderrBytes: number;
+}
+
+export interface ExecutionCommandSpec {
+  ordinal: number;
+  command: string[];
+  cwdMode: "repo_root" | "ephemeral_worktree";
+  purpose: string;
+}
+
+export interface ExecutionCommandResult {
+  ordinal: number;
+  exitCode: number | null;
+  timedOut: boolean;
+  stdoutSha256: string;
+  stderrSha256: string;
+}
+
+export interface ExecutionAudit {
+  schemaVersion: "execution-audit.v1";
+  permissionProfileId: PermissionProfileId;
+  worktreePath: string | null;
+  commands: ExecutionCommandResult[];
+}
+
 export interface SkillInput {
   schemaVersion: "skill-input.v1";
   repoId: string;
@@ -112,6 +158,8 @@ export interface SkillInput {
   requestedLensIds: string[] | null;
   maxConcurrency: number;
   allowExecutionLensClasses: LensClass[];
+  permissionProfiles: PermissionProfile[];
+  defaultPermissionProfileId: PermissionProfileId;
   artifactRoot: string;
   runBudgetMaxTokens: number;
   runBudgetMaxCostUsd: number | null;
@@ -129,10 +177,12 @@ export interface LensPlan {
   required: boolean;
   blockingPolicy: "rule_defined" | "severity_threshold" | "mixed";
   providerBindingId: string;
+  permissionProfileId: PermissionProfileId;
   changedFiles: string[];
   fullContextFiles: string[];
   omittedFiles: string[];
   scopeDigest: string;
+  executionCommands: ExecutionCommandSpec[];
   maxInputTokens: number;
   maxOutputTokens: number;
   maxCostUsd: number | null;
@@ -167,6 +217,7 @@ export interface LensResult {
   usage: UsageMetrics;
   errorCodes: ErrorCode[];
   warningCodes: ErrorCode[];
+  executionAudit: ExecutionAudit | null;
   adapterResponseHash: string;
 }
 
@@ -201,15 +252,27 @@ export interface SkillResult {
 5. Retries are fixed (`2`) with fixed backoff (`500ms`, `1500ms`) and no jitter.
 6. Provider invocation parameters are pinned per binding: exact model id + fixed sampling params.
 7. Findings conflict resolution is deterministic: `severity DESC`, `lensId ASC`, `file ASC`, `startLine ASC`, `ruleId ASC`, then `evidenceHash ASC`.
-8. Every artifact list is explicitly sorted and schema-versioned.
-9. No silent truncation is allowed; omitted context is represented in `omittedFiles` plus `CONTEXT_BOUND_EXCEEDED` warning.
-10. Drift detection replays identical normalized input and fails with `DETERMINISM_DRIFT_DETECTED` if any deterministic artifact hash differs.
+8. Execution command order is deterministic and pinned by `ExecutionCommandSpec.ordinal`; command text cannot be generated dynamically at runtime.
+9. Execution environment is deterministic: fixed env allowlist, normalized locale/timezone, fixed working directory policy, and deterministic ephemeral worktree path `.worktrees/qa-skill/<executionKey>/<planOrdinal>/`.
+10. Every artifact list is explicitly sorted and schema-versioned.
+11. No silent truncation is allowed; omitted context is represented in `omittedFiles` plus `CONTEXT_BOUND_EXCEEDED` warning.
+12. Drift detection replays identical normalized input and fails with `DETERMINISM_DRIFT_DETECTED` if any deterministic artifact hash differs.
 
 ## PASS/FAIL Semantics
 1. `PASS` only when all required lenses are `completed` and there are zero blocking findings.
 2. `FAIL` when any blocking finding exists, any required lens is missing/failed, or strict completeness cannot be satisfied.
 3. `strict` mode fails when required-scope degradation occurs.
 4. `best_effort` mode may pass with `degraded=true` only when degraded scope is non-required and deterministic degradation codes are present.
+
+## Execution and Permission Model
+1. Every lens plan gets a `permissionProfileId`; default is always `read_only`.
+2. Execution is enabled only when both conditions are true: lens class is listed in `allowExecutionLensClasses` and assigned profile is non-read-only.
+3. Permission profiles define deterministic guardrails: network access flag, worktree mode, allowed command prefix list, command count limit, timeout, and output byte bounds.
+4. Command specs are authored by lens implementations as static deterministic templates and validated against `allowedCommandPrefixes` before execution.
+5. If a command violates profile policy, the run is rejected with `EXECUTION_POLICY_VIOLATION`; no fallback implicit command rewriting is allowed.
+6. Execution runs in an ephemeral worktree rooted under `.worktrees/qa-skill/<executionKey>/<planOrdinal>/` and never mutates the primary checkout.
+7. All command outputs are hash-recorded in `ExecutionAudit` with per-command exit/timeout status; raw output may be capped but never silently dropped.
+8. Execution-related failure codes are deterministic and mode-aware: in `strict`, required execution failure yields `FAIL`; in `best_effort`, optional lens may degrade with explicit codes.
 
 ## Consistency Lens Onboarding Model
 1. `consistency-init` command builds a deterministic draft rubric from repository architecture signals and representative changed-file exemplars.
@@ -242,6 +305,8 @@ export interface SkillResult {
 | Mixed-success partial runs | Evaluate by requiredness and mode; set `degraded` and deterministic codes as needed. |
 | Base-ref fallback failures | Apply strict fallback chain; emit deterministic fallback codes or `BASE_REF_RESOLUTION_FAILED`. |
 | Budget exhaustion | Apply class-specific stop/skip/escalate policy with stable codes; never silent truncation. |
+| Execution permission mismatch | Reject deterministically with `EXECUTION_DENIED` or `EXECUTION_POLICY_VIOLATION`; never auto-escalate permissions. |
+| Execution timeout/non-zero exit | Emit `EXECUTION_TIMEOUT` or `EXECUTION_EXIT_NONZERO` with stable handling by requiredness and mode. |
 | Determinism drift | Replay against same normalized input; hash mismatch emits `DETERMINISM_DRIFT_DETECTED` and fails strict. |
 
 ## Test Cases and Acceptance Scenarios
@@ -254,22 +319,27 @@ export interface SkillResult {
 7. Budget overflow test verifies deterministic stop/skip/escalate behavior by lens class and run mode.
 8. Null metrics test verifies schema always includes token/cost fields with null + reason codes and deterministic aggregate rules.
 9. No-silent-truncation test verifies omitted context is explicitly recorded and warnings are emitted.
-10. Drift detection test replays same execution key and asserts hash equality or deterministic drift failure.
+10. Execution policy test verifies non-allowlisted command is deterministically rejected with `EXECUTION_POLICY_VIOLATION`.
+11. Execution timeout test verifies deterministic `EXECUTION_TIMEOUT` mapping and strict/best-effort behavior.
+12. Execution audit determinism test verifies identical commands produce stable audit ordering and stable output hashes.
+13. Drift detection test replays same execution key and asserts hash equality or deterministic drift failure.
 
 ## Minimal v1 Implementation Sequence
 1. Build orchestrator skeleton and normalized contracts (`SkillInput`, `LensPlan`, `LensResult`, `FinalVerdict`, `SkillResult`) plus schema validation.
 2. Implement git base-ref resolution, diff classification, deterministic planner, and artifact writer.
 3. Implement consistency lens with hybrid onboarding and versioned rubric freeze.
 4. Implement two adapters (`openai-codex`, `anthropic-claude`) behind the normalized provider interface.
-5. Implement deterministic verdict aggregation and conflict resolution logic.
-6. Add drift-check command and deterministic replay/hash comparison.
-7. Add conformance tests for determinism, PASS/FAIL semantics, and budget/error behavior.
+5. Implement permission profile evaluator and execution runner with sandboxed worktree support.
+6. Implement deterministic verdict aggregation and conflict resolution logic.
+7. Add drift-check command and deterministic replay/hash comparison.
+8. Add conformance tests for determinism, PASS/FAIL semantics, budget/error behavior, and execution policy enforcement.
 
 ## Important Public API and Interface Additions
 1. New CLI contract at `scripts/cli/run.ts` accepting normalized `SkillInput`.
 2. New versioned JSON artifact contracts under `schemas/v1/`.
 3. New lens plugin contract at `scripts/lenses/contracts.ts` for pluggable lens/sub-lens registration.
 4. New provider adapter interface at `scripts/providers/types.ts` for Claude/Codex normalization.
+5. New permission profile and execution-audit contracts for opt-in execution-enabled analyses.
 
 ## Assumptions and Defaults
 1. Runtime is Bun-first; provider adapters use deterministic HTTP/API clients while remaining SDK-aligned.
@@ -279,6 +349,7 @@ export interface SkillResult {
 5. Consistency lens onboarding uses hybrid draft + human freeze.
 6. API keys are supplied via environment variables and never written to artifacts.
 7. Model IDs are required config values and must be pinned exactly per adapter version.
+8. Non-read-only permission profiles are opt-in and disabled by default in initial rollout.
 
 ## References
 1. [Agent Skills Open Specification](https://agentskills.io/specification)
