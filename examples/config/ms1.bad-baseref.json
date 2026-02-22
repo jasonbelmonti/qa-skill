@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "qa-run-config.v1",
+  "runMode": "strict",
+  "baseRef": "refs/heads/does-not-exist"
+}
