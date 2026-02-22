@@ -1,21 +1,6 @@
-import { stableStringify } from "./canonical-json";
-
-export type CliErrorCode =
-  | "USAGE_ERROR"
-  | "CONFIG_READ_ERROR"
-  | "CONFIG_PARSE_ERROR"
-  | "CONFIG_VALIDATION_ERROR"
-  | "OUT_DIR_NON_EMPTY"
-  | "ARTIFACT_WRITE_ERROR";
-
-export const EXIT_CODE_BY_ERROR: Record<CliErrorCode, number> = {
-  USAGE_ERROR: 2,
-  CONFIG_READ_ERROR: 3,
-  CONFIG_PARSE_ERROR: 3,
-  CONFIG_VALIDATION_ERROR: 3,
-  OUT_DIR_NON_EMPTY: 4,
-  ARTIFACT_WRITE_ERROR: 5,
-};
+import { stableStringify } from "../../utils/canonical-json";
+import { EXIT_CODE_BY_ERROR } from "./constants";
+import type { CliErrorCode } from "./types";
 
 export class CliError extends Error {
   readonly code: CliErrorCode;

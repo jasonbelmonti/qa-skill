@@ -1,34 +1,30 @@
 import { basename, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 
-import type { QaRunConfigV1 } from "../contracts/config";
+import type { QaRunConfigV1 } from "../../contracts/config";
 import type {
   LensClass,
   PermissionProfile,
   PermissionProfileId,
   ProviderBinding,
   SkillInput,
-} from "../contracts/skill-input";
-import { hashCanonical } from "./hash";
-import { CliError } from "./errors";
-
-export const DEFAULT_READ_ONLY_PERMISSION_PROFILE: PermissionProfile = {
-  profileId: "read_only",
-  readOnly: true,
-  allowNetwork: false,
-  worktreeMode: "none",
-  allowedCommandPrefixes: [],
-  maxCommandsPerPlan: 0,
-  commandTimeoutMs: 0,
-  maxStdoutBytes: 0,
-  maxStderrBytes: 0,
-};
-
-interface NormalizeOptions {
-  cwd?: string;
-  resolveRealpath?: (path: string) => Promise<string>;
-  getOriginRemoteUrl?: (repoRoot: string) => Promise<string | null>;
-}
+} from "../../contracts/skill-input";
+import { hashCanonical } from "../../utils/hash";
+import { CliError } from "../errors";
+import {
+  DEFAULT_ARTIFACT_ROOT,
+  DEFAULT_BASE_REF,
+  DEFAULT_HEAD_REF,
+  DEFAULT_MAX_CONCURRENCY,
+  DEFAULT_PERMISSION_PROFILE_ID,
+  DEFAULT_READ_ONLY_PERMISSION_PROFILE,
+  DEFAULT_REQUESTED_LENS_IDS,
+  DEFAULT_RUN_BUDGET_MAX_COST_USD,
+  DEFAULT_RUN_BUDGET_MAX_TOKENS,
+  DEFAULT_RUN_MODE,
+  DEFAULT_VCS,
+} from "./constants";
+import type { NormalizeOptions } from "./types";
 
 function clonePermissionProfile(profile: PermissionProfile): PermissionProfile {
   return {
@@ -178,14 +174,18 @@ export async function normalizeConfigToSkillInput(
     config.permissionProfiles ?? []
   ).map(clonePermissionProfile);
 
-  if (!permissionProfiles.some((profile) => profile.profileId === "read_only")) {
+  if (
+    !permissionProfiles.some(
+      (profile) => profile.profileId === DEFAULT_PERMISSION_PROFILE_ID,
+    )
+  ) {
     permissionProfiles.push(clonePermissionProfile(DEFAULT_READ_ONLY_PERMISSION_PROFILE));
   }
 
   ensureUniqueProfileIds(permissionProfiles);
 
   const defaultPermissionProfileId =
-    config.defaultPermissionProfileId ?? "read_only";
+    config.defaultPermissionProfileId ?? DEFAULT_PERMISSION_PROFILE_ID;
 
   ensureDefaultPermissionProfilePresent(
     permissionProfiles,
@@ -196,20 +196,23 @@ export async function normalizeConfigToSkillInput(
     schemaVersion: "skill-input.v1",
     repoId,
     repoRoot: normalizedRepoRoot,
-    vcs: "git",
-    baseRef: config.baseRef ?? null,
-    headRef: config.headRef ?? "HEAD",
-    runMode: config.runMode ?? "strict",
-    requestedLensIds: config.requestedLensIds ?? null,
-    maxConcurrency: config.maxConcurrency ?? 4,
+    vcs: DEFAULT_VCS,
+    baseRef: config.baseRef ?? DEFAULT_BASE_REF,
+    headRef: config.headRef ?? DEFAULT_HEAD_REF,
+    runMode: config.runMode ?? DEFAULT_RUN_MODE,
+    requestedLensIds: config.requestedLensIds ?? DEFAULT_REQUESTED_LENS_IDS,
+    maxConcurrency: config.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     allowExecutionLensClasses:
       (config.allowExecutionLensClasses as LensClass[] | undefined) ?? [],
     permissionProfiles,
     defaultPermissionProfileId,
-    artifactRoot: config.artifactRoot ?? ".qa-skill",
-    runBudgetMaxTokens: config.runBudgetMaxTokens ?? 300_000,
+    artifactRoot: config.artifactRoot ?? DEFAULT_ARTIFACT_ROOT,
+    runBudgetMaxTokens:
+      config.runBudgetMaxTokens ?? DEFAULT_RUN_BUDGET_MAX_TOKENS,
     runBudgetMaxCostUsd:
-      config.runBudgetMaxCostUsd === undefined ? 12 : config.runBudgetMaxCostUsd,
+      config.runBudgetMaxCostUsd === undefined
+        ? DEFAULT_RUN_BUDGET_MAX_COST_USD
+        : config.runBudgetMaxCostUsd,
     providerBindings: (config.providerBindings ?? []).map(cloneProviderBinding),
   };
 

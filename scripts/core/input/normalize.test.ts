@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 
-import type { QaRunConfigV1 } from "../contracts/config";
-import { CliError } from "./errors";
+import type { QaRunConfigV1 } from "../../contracts/config";
+import { CliError } from "../errors";
+import { DEFAULT_READ_ONLY_PERMISSION_PROFILE } from "./constants";
 import {
-  DEFAULT_READ_ONLY_PERMISSION_PROFILE,
   deriveRepoIdFromRemoteUrl,
   normalizeConfigToSkillInput,
-} from "./normalize-input";
+} from "./normalize";
 
 test("deriveRepoIdFromRemoteUrl handles https remotes", () => {
   expect(

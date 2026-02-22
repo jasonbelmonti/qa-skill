@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 
-import { loadConfig } from "../core/config-loader";
-import { stableStringify } from "../core/canonical-json";
+import { stableStringify } from "../utils/canonical-json";
+import { loadConfig } from "../core/config/loader";
 import { formatCliErrorLine, CliError, toCliError } from "../core/errors";
-import { normalizeConfigToSkillInput } from "../core/normalize-input";
+import { normalizeConfigToSkillInput } from "../core/input/normalize";
 import {
   prepareOutputDirectory,
   writeNormalizedInputArtifact,
-} from "../core/output";
+} from "../core/artifacts/output";
 
 interface CliArgs {
   configPath: string;

@@ -225,3 +225,25 @@ test("qa:run returns validation error for invalid repoRoot path", async () => {
     expect(stdoutPayload.code).toBe("CONFIG_VALIDATION_ERROR");
   });
 });
+
+test("qa:run returns artifact write error when output path cannot be created", async () => {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    await writeFile(configPath, "{}\n", "utf8");
+
+    const result = runQa([
+      "--config",
+      configPath,
+      "--out",
+      "/dev/null/qa-skill-out",
+    ]);
+
+    expect(result.exitCode).toBe(5);
+    const stdoutPayload = parseJsonLine(result.stdout);
+    expect(stdoutPayload.code).toBe("ARTIFACT_WRITE_ERROR");
+  });
+});

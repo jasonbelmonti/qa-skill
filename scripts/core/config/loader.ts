@@ -1,49 +1,21 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { QaRunConfigV1 } from "../contracts/config";
+import type { QaRunConfigV1 } from "../../contracts/config";
 import type {
   LensClass,
   PermissionProfile,
   PermissionProfileId,
   ProviderBinding,
   RunMode,
-} from "../contracts/skill-input";
-import { CliError } from "./errors";
-
-const LENS_CLASSES: readonly LensClass[] = [
-  "consistency",
-  "security",
-  "architecture",
-  "style",
-  "performance",
-];
-
-const PERMISSION_PROFILE_IDS: readonly PermissionProfileId[] = [
-  "read_only",
-  "exec_sandboxed",
-  "exec_sandboxed_network_off",
-];
-
-const RUN_MODES: readonly RunMode[] = ["strict", "best_effort"];
-
-const ALLOWED_TOP_LEVEL_KEYS = new Set([
-  "schemaVersion",
-  "repoId",
-  "repoRoot",
-  "baseRef",
-  "headRef",
-  "runMode",
-  "requestedLensIds",
-  "maxConcurrency",
-  "allowExecutionLensClasses",
-  "permissionProfiles",
-  "defaultPermissionProfileId",
-  "artifactRoot",
-  "runBudgetMaxTokens",
-  "runBudgetMaxCostUsd",
-  "providerBindings",
-]);
+} from "../../contracts/skill-input";
+import { CliError } from "../errors";
+import {
+  ALLOWED_TOP_LEVEL_KEYS,
+  LENS_CLASSES,
+  PERMISSION_PROFILE_IDS,
+  RUN_MODES,
+} from "./constants";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
