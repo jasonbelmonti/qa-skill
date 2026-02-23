@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { SkillInput } from "../../contracts/skill-input";
 import { stableStringify } from "../../utils/canonical-json";
 import { CliError } from "../errors";
+import { assertSchema } from "../schema/validate";
 
 function hasErrorCode(error: unknown, code: string): boolean {
   return (
@@ -74,6 +75,8 @@ export async function writeNormalizedInputArtifact(
   outDir: string,
   input: SkillInput,
 ): Promise<string> {
+  assertSchema("skill-input.v1", input, "ARTIFACT_SCHEMA_INVALID");
+
   const artifactPath = join(outDir, "input.normalized.json");
   const content = `${stableStringify(input, { pretty: true })}\n`;
 

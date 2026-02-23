@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/qa-run-config.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "qa-run-config.v1"
+    },
+    "repoId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repoRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseRef": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "headRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runMode": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/runMode"
+    },
+    "requestedLensIds": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "maxConcurrency": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "allowExecutionLensClasses": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/lensClass"
+      }
+    },
+    "permissionProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/permissionProfile"
+      }
+    },
+    "defaultPermissionProfileId": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/permissionProfileId"
+    },
+    "artifactRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runBudgetMaxTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "runBudgetMaxCostUsd": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "providerBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/providerBinding"
+      }
+    }
+  }
+}

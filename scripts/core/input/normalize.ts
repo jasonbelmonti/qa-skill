@@ -11,6 +11,7 @@ import type {
 } from "../../contracts/skill-input";
 import { hashCanonical } from "../../utils/hash";
 import { CliError } from "../errors";
+import { assertSchema } from "../schema/validate";
 import {
   DEFAULT_ARTIFACT_ROOT,
   DEFAULT_BASE_REF,
@@ -264,8 +265,12 @@ export async function normalizeConfigToSkillInput(
 
   const configHash = hashCanonical(normalizedWithoutHash);
 
-  return {
+  const normalizedInput: SkillInput = {
     ...normalizedWithoutHash,
     configHash,
   };
+
+  assertSchema("skill-input.v1", normalizedInput, "ARTIFACT_SCHEMA_INVALID");
+
+  return normalizedInput;
 }

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/lens-result.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "lens-result.v1"
+    },
+    "planOrdinal": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lensId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subLensId": {
+      "type": ["string", "null"]
+    },
+    "lensVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/lensStatus"
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/finding"
+      }
+    },
+    "evidenceSummary": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "usage": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/usageMetrics"
+    },
+    "errorCodes": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/errorCode"
+      }
+    },
+    "warningCodes": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/errorCode"
+      }
+    },
+    "executionAudit": {
+      "anyOf": [
+        {
+          "$ref": "https://qa-skill.local/schemas/v1/execution-audit.v1.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "adapterResponseHash": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/sha256HexString"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "planOrdinal",
+    "lensId",
+    "subLensId",
+    "lensVersion",
+    "status",
+    "degraded",
+    "findings",
+    "evidenceSummary",
+    "usage",
+    "errorCodes",
+    "warningCodes",
+    "executionAudit",
+    "adapterResponseHash"
+  ]
+}

@@ -178,3 +178,25 @@ test("normalizeConfigToSkillInput rejects repoRoot values that resolve to files"
     }
   });
 });
+
+test("normalizeConfigToSkillInput rejects schema-invalid normalized payload", async () => {
+  await withTempDir(async (testDir) => {
+    try {
+      await normalizeConfigToSkillInput(
+        {
+          maxConcurrency: 0,
+        },
+        {
+          cwd: testDir,
+          getOriginRemoteUrl: async () => null,
+        },
+      );
+      throw new Error("Expected normalizeConfigToSkillInput to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("ARTIFACT_SCHEMA_INVALID");
+      expect(cliError.message).toContain("skill-input.v1");
+    }
+  });
+});

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/final-verdict.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "final-verdict.v1"
+    },
+    "status": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/verdictStatus"
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "rationale": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "requiredLensIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "missingRequiredLensIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "failedRequiredLensIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "blockingFindings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/finding"
+      }
+    },
+    "errorCodes": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/errorCode"
+      }
+    },
+    "aggregateUsage": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/usageMetrics"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "status",
+    "degraded",
+    "rationale",
+    "requiredLensIds",
+    "missingRequiredLensIds",
+    "failedRequiredLensIds",
+    "blockingFindings",
+    "errorCodes",
+    "aggregateUsage"
+  ]
+}
