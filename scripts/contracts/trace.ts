@@ -16,8 +16,14 @@ export interface DiffAnalysisTrace {
   contextBounds: ContextBoundsResult;
 }
 
+export interface LensSelectionTrace {
+  requestedLensIds: string[] | null;
+  selectedLensIds: string[];
+}
+
 export interface TraceArtifactV1 {
   schemaVersion: "trace.v1";
   baseRefResolution: BaseRefResolutionTrace;
+  lensSelection?: LensSelectionTrace;
   diffAnalysis?: DiffAnalysisTrace;
 }

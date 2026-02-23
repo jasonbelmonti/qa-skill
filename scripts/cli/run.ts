@@ -103,8 +103,11 @@ export async function runCli(args: string[]): Promise<number> {
       );
     }
 
-    const registry = await loadLensRegistry();
-    resolveRequestedLensIds(registry, normalized.input.requestedLensIds);
+    const registry = await loadLensRegistry({ repoRoot: normalized.input.repoRoot });
+    const lensSelection = resolveRequestedLensIds(
+      registry,
+      normalized.input.requestedLensIds,
+    );
 
     const diff = await collectDiff(
       normalized.input.repoRoot,
@@ -117,6 +120,13 @@ export async function runCli(args: string[]): Promise<number> {
     const artifactPath = await writeNormalizedInputArtifact(outDir, normalized.input);
     await writeTraceArtifact(outDir, {
       ...normalized.trace,
+      lensSelection: {
+        requestedLensIds:
+          normalized.input.requestedLensIds === null
+            ? null
+            : [...normalized.input.requestedLensIds],
+        selectedLensIds: [...lensSelection.selectedLensIds],
+      },
       diffAnalysis: {
         diff,
         changeSurface,
