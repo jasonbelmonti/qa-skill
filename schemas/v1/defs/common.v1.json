@@ -71,13 +71,16 @@
       "additionalProperties": false,
       "properties": {
         "inputTokens": {
-          "type": ["number", "null"]
+          "type": ["integer", "null"],
+          "minimum": 0
         },
         "outputTokens": {
-          "type": ["number", "null"]
+          "type": ["integer", "null"],
+          "minimum": 0
         },
         "totalTokens": {
-          "type": ["number", "null"]
+          "type": ["integer", "null"],
+          "minimum": 0
         },
         "costUsd": {
           "type": ["number", "null"],

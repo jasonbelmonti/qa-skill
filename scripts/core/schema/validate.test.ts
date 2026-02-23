@@ -261,3 +261,24 @@ test("assertSchema emits deterministic validation errors for invalid payloads", 
   expect(firstError.message).toBe(secondError.message);
   expect(firstError.message).toContain("qa-run-config.v1");
 });
+
+test("validateSchema rejects non-integer and negative usage token counts", () => {
+  const invalidLensResult = {
+    ...buildLensResult(),
+    usage: {
+      ...buildUsageMetrics(),
+      inputTokens: -1,
+      outputTokens: 1.5,
+      totalTokens: -2,
+    },
+  };
+
+  const result = validateSchema("lens-result.v1", invalidLensResult);
+  expect(result.valid).toBe(false);
+  expect(result.errors.length).toBeGreaterThan(0);
+
+  const paths = result.errors.map((error) => error.instancePath);
+  expect(paths).toContain("/usage/inputTokens");
+  expect(paths).toContain("/usage/outputTokens");
+  expect(paths).toContain("/usage/totalTokens");
+});
