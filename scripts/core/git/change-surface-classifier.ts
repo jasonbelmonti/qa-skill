@@ -157,7 +157,7 @@ function createMutableCounts(): MutableCounts {
 }
 
 function normalizePathForMatching(filePath: string): string {
-  return filePath.trim().replace(/\\/g, "/").toLowerCase();
+  return filePath.replace(/\\/g, "/").toLowerCase();
 }
 
 function getPathExtension(normalizedPath: string): string | null {
@@ -194,7 +194,10 @@ function isDocsPath(normalizedPath: string): boolean {
 }
 
 function isInfraPath(normalizedPath: string): boolean {
+  const lastSegment = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
   return (
+    lastSegment === "dockerfile" ||
+    lastSegment.startsWith("dockerfile.") ||
     hasPathSegment(normalizedPath, ".github") ||
     hasPathSegment(normalizedPath, "infra") ||
     hasPathSegment(normalizedPath, "terraform") ||

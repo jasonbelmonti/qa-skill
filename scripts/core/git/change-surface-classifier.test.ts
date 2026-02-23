@@ -25,6 +25,7 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
       "tests/integration/config.test.json",
       "docs/README.md",
       "scripts/build.sh",
+      "Dockerfile",
       ".github/workflows/ci.yaml",
       "assets/logo.png",
       "package.json",
@@ -86,8 +87,17 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
         header: "@@ -1 +1 @@ run_build step_one",
       },
       {
-        filePath: ".github/workflows/ci.yaml",
+        filePath: "Dockerfile",
         hunkOrdinal: 6,
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 1,
+        header: "@@ -1 +1 @@ FROM node:20-alpine",
+      },
+      {
+        filePath: ".github/workflows/ci.yaml",
+        hunkOrdinal: 7,
         oldStart: 1,
         oldLines: 1,
         newStart: 1,
@@ -96,7 +106,7 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
       },
       {
         filePath: "package.json",
-        hunkOrdinal: 7,
+        hunkOrdinal: 8,
         oldStart: 1,
         oldLines: 1,
         newStart: 1,
@@ -105,7 +115,7 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
       },
       {
         filePath: "notes.txt",
-        hunkOrdinal: 8,
+        hunkOrdinal: 9,
         oldStart: 1,
         oldLines: 0,
         newStart: 1,
@@ -119,6 +129,7 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
 
   expect(result.files.map((file) => file.filePath)).toEqual([
     ".github/workflows/ci.yaml",
+    "Dockerfile",
     "assets/logo.png",
     "docs/README.md",
     "notes.txt",
@@ -163,6 +174,11 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
     bucket: "source",
     scope: "tooling",
     language: "shell",
+  });
+  expect(byPath.get("Dockerfile")).toMatchObject({
+    bucket: "infra",
+    scope: "infra",
+    language: "unknown",
   });
   expect(byPath.get(".github/workflows/ci.yaml")).toMatchObject({
     bucket: "infra",
@@ -213,6 +229,7 @@ test("classifyChangeSurface maps known file types to deterministic categories", 
     "shell",
     "text",
     "binary",
+    "unknown",
   ]);
 });
 
@@ -264,7 +281,7 @@ test("classifyChangeSurface applies deterministic precedence for test paths", ()
 
 test("classifyChangeSurface uses explicit unknown fallback for edge file types", () => {
   const diff = createDiff({
-    changedFiles: ["README", "weird/file.customext"],
+    changedFiles: ["README", "weird/file.customext", "scripts/file.ts "],
     hunks: [
       {
         filePath: "weird/file.customext",
@@ -274,6 +291,15 @@ test("classifyChangeSurface uses explicit unknown fallback for edge file types",
         newStart: 1,
         newLines: 1,
         header: "@@ -1 +1 @@ custom",
+      },
+      {
+        filePath: "scripts/file.ts ",
+        hunkOrdinal: 1,
+        oldStart: 3,
+        oldLines: 1,
+        newStart: 3,
+        newLines: 1,
+        header: "@@ -3 +3 @@ spaced",
       },
     ],
   });
@@ -286,6 +312,10 @@ test("classifyChangeSurface uses explicit unknown fallback for edge file types",
     language: "unknown",
   });
   expect(byPath.get("weird/file.customext")).toMatchObject({
+    bucket: "unknown",
+    language: "unknown",
+  });
+  expect(byPath.get("scripts/file.ts ")).toMatchObject({
     bucket: "unknown",
     language: "unknown",
   });
