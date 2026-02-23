@@ -4,6 +4,9 @@ import type { BaseRefWarningCode } from "../contracts/error-codes";
 import { stableStringify } from "../utils/canonical-json";
 import { loadConfig } from "../core/config/loader";
 import { formatCliErrorLine, CliError, toCliError } from "../core/errors";
+import { applyContextBounds } from "../core/context/bounds";
+import { classifyChangeSurface } from "../core/git/change-surface-classifier";
+import { collectDiff } from "../core/git/diff-collector";
 import { BaseRefResolutionError } from "../core/git/types";
 import { normalizeConfigForRun } from "../core/input/normalize";
 import {
@@ -91,7 +94,29 @@ export async function runCli(args: string[]): Promise<number> {
 
     const normalized = await normalizeConfigForRun(config);
     const artifactPath = await writeNormalizedInputArtifact(outDir, normalized.input);
-    await writeTraceArtifact(outDir, normalized.trace);
+    if (normalized.input.baseRef === null) {
+      throw new CliError(
+        "CONFIG_VALIDATION_ERROR",
+        "Normalized input is missing resolved baseRef",
+      );
+    }
+
+    const diff = await collectDiff(
+      normalized.input.repoRoot,
+      normalized.input.baseRef,
+      normalized.input.headRef,
+    );
+    const changeSurface = classifyChangeSurface(diff);
+    const contextBounds = applyContextBounds(diff);
+
+    await writeTraceArtifact(outDir, {
+      ...normalized.trace,
+      diffAnalysis: {
+        diff,
+        changeSurface,
+        contextBounds,
+      },
+    });
 
     emitBaseRefWarningLines(normalized.trace.baseRefResolution.warningCodes);
 
