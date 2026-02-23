@@ -1,0 +1,14 @@
+{
+  "defaultRunMode": "strict",
+  "deterministicOrdering": {
+    "lenses": "lensId ASC",
+    "subLenses": "subLensId ASC"
+  },
+  "name": "qa-skill",
+  "registryPath": "skill/registry.v1.json",
+  "schemaVersion": "skill-manifest.v1",
+  "skillId": "qa-skill",
+  "skillVersion": "1.0.0",
+  "summary": "Deterministic QA orchestrator skill manifest with pluggable lens registry metadata.",
+  "supportedLensClasses": ["consistency", "style"]
+}

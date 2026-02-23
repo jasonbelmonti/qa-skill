@@ -44,3 +44,5 @@ Included in BEL-201:
 6. `skill-result.v1.json`
 7. `execution-audit.v1.json`
 8. `defs/common.v1.json`
+9. `skill-manifest.v1.json`
+10. `skill-registry.v1.json`

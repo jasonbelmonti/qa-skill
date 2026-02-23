@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "bun:test";
 
 import { CliError } from "../errors";
@@ -174,6 +176,83 @@ function buildSkillInput() {
   };
 }
 
+function buildSkillManifest() {
+  return {
+    schemaVersion: "skill-manifest.v1",
+    skillId: "qa-skill",
+    skillVersion: "1.0.0",
+    name: "qa-skill",
+    summary: "Deterministic QA orchestrator skill manifest.",
+    registryPath: "skill/registry.v1.json",
+    defaultRunMode: "strict",
+    supportedLensClasses: ["consistency", "style"],
+    deterministicOrdering: {
+      lenses: "lensId ASC",
+      subLenses: "subLensId ASC",
+    },
+  };
+}
+
+function buildSkillRegistry() {
+  return {
+    schemaVersion: "skill-registry.v1",
+    skillId: "qa-skill",
+    skillVersion: "1.0.0",
+    orderingRules: {
+      lenses: "lensId ASC",
+      subLenses: "subLensId ASC",
+    },
+    lenses: [
+      {
+        lensId: "consistency-core",
+        lensVersion: "1.0.0",
+        lensClass: "consistency",
+        title: "Consistency Core",
+        description: "Core consistency checks.",
+        requiredByDefault: true,
+        defaultPermissionProfileId: "read_only",
+        trigger: {
+          includeGlobs: ["**/*.ts"],
+          excludeGlobs: [],
+          pathPrefixes: ["scripts/"],
+          symbolHints: ["deterministic"],
+          minConfidence: 0.5,
+        },
+        subLenses: [
+          {
+            subLensId: "architecture-drift",
+            title: "Architecture Drift",
+            description: "Architecture checks.",
+            required: true,
+            blockingPolicy: "rule_defined",
+            trigger: {
+              includeGlobs: ["**/*.ts"],
+              excludeGlobs: [],
+              pathPrefixes: ["scripts/"],
+              symbolHints: ["orchestrator"],
+              minConfidence: 0.7,
+            },
+          },
+          {
+            subLensId: "style-guides",
+            title: "Style Guides",
+            description: "Style checks.",
+            required: false,
+            blockingPolicy: "mixed",
+            trigger: {
+              includeGlobs: ["**/*.ts"],
+              excludeGlobs: [],
+              pathPrefixes: ["scripts/"],
+              symbolHints: ["style"],
+              minConfidence: 0.4,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function buildQaRunConfig() {
   return {
     schemaVersion: "qa-run-config.v1",
@@ -200,6 +279,8 @@ function buildSkillResult() {
 
 const VALID_PAYLOADS_BY_SCHEMA: Record<SchemaKey, unknown> = {
   "qa-run-config.v1": buildQaRunConfig(),
+  "skill-manifest.v1": buildSkillManifest(),
+  "skill-registry.v1": buildSkillRegistry(),
   "skill-input.v1": buildSkillInput(),
   "lens-plan.v1": buildLensPlan(),
   "lens-result.v1": buildLensResult(),
@@ -208,9 +289,11 @@ const VALID_PAYLOADS_BY_SCHEMA: Record<SchemaKey, unknown> = {
   "execution-audit.v1": buildExecutionAudit(),
 };
 
-test("schema registry contains the complete BEL-201 schema set", () => {
+test("schema registry contains the complete schema set including skill contracts", () => {
   expect(getRegisteredSchemaKeys()).toEqual([
     "qa-run-config.v1",
+    "skill-manifest.v1",
+    "skill-registry.v1",
     "skill-input.v1",
     "lens-plan.v1",
     "lens-result.v1",
@@ -281,4 +364,38 @@ test("validateSchema rejects non-integer and negative usage token counts", () =>
   expect(paths).toContain("/usage/inputTokens");
   expect(paths).toContain("/usage/outputTokens");
   expect(paths).toContain("/usage/totalTokens");
+});
+
+function loadJsonFixture(relativePath: string): unknown {
+  const fixturePath = new URL(relativePath, import.meta.url);
+  const raw = readFileSync(fixturePath, "utf8");
+  return JSON.parse(raw) as unknown;
+}
+
+test("skill manifest and registry fixtures validate against schema contracts", () => {
+  const manifest = loadJsonFixture("../../../skill/manifest.v1.json");
+  const registry = loadJsonFixture("../../../skill/registry.v1.json");
+
+  expect(validateSchema("skill-manifest.v1", manifest)).toEqual({
+    valid: true,
+    errors: [],
+  });
+  expect(validateSchema("skill-registry.v1", registry)).toEqual({
+    valid: true,
+    errors: [],
+  });
+});
+
+test("skill registry fixture keeps deterministic lens/sub-lens ordering", () => {
+  const registry = loadJsonFixture("../../../skill/registry.v1.json") as {
+    lenses: Array<{ lensId: string; subLenses: Array<{ subLensId: string }> }>;
+  };
+
+  const lensIds = registry.lenses.map((lens) => lens.lensId);
+  expect(lensIds).toEqual([...lensIds].sort());
+
+  for (const lens of registry.lenses) {
+    const subLensIds = lens.subLenses.map((subLens) => subLens.subLensId);
+    expect(subLensIds).toEqual([...subLensIds].sort());
+  }
 });
