@@ -131,7 +131,7 @@ test("applyContextBounds emits deterministic line-limit omissions", () => {
     limits: {
       maxContextFiles: 4,
       maxContextHunks: 2,
-      maxContextChangedLines: 4,
+      maxContextChangedLines: 8,
       maxDiffFiles: 100,
       maxDiffHunks: 100,
     },
@@ -148,7 +148,52 @@ test("applyContextBounds emits deterministic line-limit omissions", () => {
       oldLines: 3,
       newStart: 10,
       newLines: 3,
-      changedLines: 3,
+      changedLines: 6,
+      reason: "LINE_LIMIT",
+    },
+  ]);
+  expect(result.warningCodes).toEqual(["CONTEXT_BOUND_EXCEEDED"]);
+  expect(result.errorCodes).toEqual([]);
+});
+
+test("applyContextBounds counts both deleted and added lines for rewrite hunks", () => {
+  const diff = createDiff({
+    changedFiles: ["rewrite.ts"],
+    hunks: [
+      {
+        filePath: "rewrite.ts",
+        hunkOrdinal: 0,
+        oldStart: 1,
+        oldLines: 120,
+        newStart: 1,
+        newLines: 120,
+        header: "@@ -1,120 +1,120 @@",
+      },
+    ],
+  });
+
+  const result = applyContextBounds(diff, {
+    limits: {
+      maxDiffFiles: 10,
+      maxDiffHunks: 10,
+      maxContextFiles: 10,
+      maxContextHunks: 10,
+      maxContextChangedLines: 200,
+    },
+  });
+
+  expect(result.selectedFiles).toEqual([]);
+  expect(result.selectedHunks).toEqual([]);
+  expect(result.omittedFiles).toEqual(["rewrite.ts"]);
+  expect(result.omittedHunks).toEqual([
+    {
+      filePath: "rewrite.ts",
+      hunkOrdinal: 0,
+      oldStart: 1,
+      oldLines: 120,
+      newStart: 1,
+      newLines: 120,
+      changedLines: 240,
       reason: "LINE_LIMIT",
     },
   ]);

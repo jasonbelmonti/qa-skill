@@ -53,7 +53,7 @@ function normalizeLimits(
 }
 
 function getChangedLines(hunk: DiffHunk): number {
-  return Math.max(hunk.oldLines, hunk.newLines);
+  return hunk.oldLines + hunk.newLines;
 }
 
 function normalizeHunks(hunks: readonly DiffHunk[]): DiffHunk[] {
