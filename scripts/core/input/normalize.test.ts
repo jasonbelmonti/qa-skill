@@ -5,11 +5,14 @@ import { tmpdir } from "node:os";
 
 import type { QaRunConfigV1 } from "../../contracts/config";
 import { CliError } from "../errors";
+import type { BaseRefResolutionResult } from "../git/types";
 import { DEFAULT_READ_ONLY_PERMISSION_PROFILE } from "./constants";
 import {
   deriveRepoIdFromRemoteUrl,
+  normalizeConfigForRun,
   normalizeConfigToSkillInput,
 } from "./normalize";
+import type { NormalizeOptions } from "./types";
 
 async function withTempDir<T>(fn: (tempDir: string) => Promise<T>): Promise<T> {
   const testDir = await mkdtemp(join(tmpdir(), "qa-skill-normalize-"));
@@ -18,6 +21,25 @@ async function withTempDir<T>(fn: (tempDir: string) => Promise<T>): Promise<T> {
   } finally {
     await rm(testDir, { recursive: true, force: true });
   }
+}
+
+function createNormalizeOptions(
+  cwd: string,
+  overrides: Partial<NormalizeOptions> = {},
+): NormalizeOptions {
+  return {
+    cwd,
+    getOriginRemoteUrl: async () => "https://github.com/acme/qa-skill.git",
+    resolveBaseRef: async (
+      _repoRoot: string,
+      configuredBaseRef: string | null | undefined,
+    ): Promise<BaseRefResolutionResult> => ({
+      requestedBaseRef: configuredBaseRef ?? null,
+      resolvedBaseRef: configuredBaseRef ?? "origin/main",
+      warningCodes: [],
+    }),
+    ...overrides,
+  };
 }
 
 test("deriveRepoIdFromRemoteUrl handles https remotes", () => {
@@ -31,7 +53,10 @@ test("deriveRepoIdFromRemoteUrl handles https remotes", () => {
 
 test("deriveRepoIdFromRemoteUrl handles ssh remotes", () => {
   expect(
-    deriveRepoIdFromRemoteUrl("git@github.com:jasonbelmonti/qa-skill.git", "/tmp/qa-skill"),
+    deriveRepoIdFromRemoteUrl(
+      "git@github.com:jasonbelmonti/qa-skill.git",
+      "/tmp/qa-skill",
+    ),
   ).toBe("jasonbelmonti/qa-skill");
 });
 
@@ -70,10 +95,7 @@ test("normalizeConfigToSkillInput applies deterministic defaults", async () => {
     const expectedRepoRoot = await realpath(testDir);
     const normalized = await normalizeConfigToSkillInput(
       {},
-      {
-        cwd: testDir,
-        getOriginRemoteUrl: async () => "https://github.com/acme/qa-skill.git",
-      },
+      createNormalizeOptions(testDir),
     );
 
     expect(normalized).toMatchObject({
@@ -81,7 +103,7 @@ test("normalizeConfigToSkillInput applies deterministic defaults", async () => {
       repoId: "acme/qa-skill",
       repoRoot: expectedRepoRoot,
       vcs: "git",
-      baseRef: null,
+      baseRef: "origin/main",
       headRef: "HEAD",
       runMode: "strict",
       requestedLensIds: null,
@@ -108,10 +130,9 @@ test("normalizeConfigToSkillInput is deterministic for equal input", async () =>
       maxConcurrency: 4,
     };
 
-    const options = {
-      cwd: testDir,
+    const options = createNormalizeOptions(testDir, {
       getOriginRemoteUrl: async () => "git@github.com:acme/qa-skill.git",
-    };
+    });
 
     const a = await normalizeConfigToSkillInput(config, options);
     const b = await normalizeConfigToSkillInput(config, options);
@@ -127,10 +148,9 @@ test("normalizeConfigToSkillInput preserves explicit null cost budget", async ()
       {
         runBudgetMaxCostUsd: null,
       },
-      {
-        cwd: testDir,
+      createNormalizeOptions(testDir, {
         getOriginRemoteUrl: async () => null,
-      },
+      }),
     );
 
     expect(normalized.runBudgetMaxCostUsd).toBeNull();
@@ -145,10 +165,9 @@ test("normalizeConfigToSkillInput fails when defaultPermissionProfileId is missi
           permissionProfiles: [DEFAULT_READ_ONLY_PERMISSION_PROFILE],
           defaultPermissionProfileId: "exec_sandboxed",
         },
-        {
-          cwd: testDir,
+        createNormalizeOptions(testDir, {
           getOriginRemoteUrl: async () => null,
-        },
+        }),
       );
       throw new Error("Expected normalizeConfigToSkillInput to throw");
     } catch (error) {
@@ -167,7 +186,9 @@ test("normalizeConfigToSkillInput rejects repoRoot values that resolve to files"
     try {
       await normalizeConfigToSkillInput(
         { repoRoot: filePath },
-        { cwd: testDir, getOriginRemoteUrl: async () => null },
+        createNormalizeOptions(testDir, {
+          getOriginRemoteUrl: async () => null,
+        }),
       );
       throw new Error("Expected normalizeConfigToSkillInput to throw");
     } catch (error) {
@@ -176,5 +197,37 @@ test("normalizeConfigToSkillInput rejects repoRoot values that resolve to files"
       expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
       expect(cliError.message).toContain("repoRoot is not a directory");
     }
+  });
+});
+
+test("normalizeConfigForRun emits trace with deterministic warning codes", async () => {
+  await withTempDir(async (testDir) => {
+    const normalized = await normalizeConfigForRun(
+      {},
+      createNormalizeOptions(testDir, {
+        resolveBaseRef: async (): Promise<BaseRefResolutionResult> => ({
+          requestedBaseRef: null,
+          resolvedBaseRef: "origin/main",
+          warningCodes: [
+            "BASE_REF_FALLBACK_ORIGIN_HEAD_UNAVAILABLE",
+            "BASE_REF_FALLBACK_ORIGIN_MAIN",
+          ],
+        }),
+      }),
+    );
+
+    expect(normalized.input.baseRef).toBe("origin/main");
+    expect(normalized.trace).toEqual({
+      schemaVersion: "trace.v1",
+      baseRefResolution: {
+        requestedBaseRef: null,
+        resolvedBaseRef: "origin/main",
+        warningCodes: [
+          "BASE_REF_FALLBACK_ORIGIN_HEAD_UNAVAILABLE",
+          "BASE_REF_FALLBACK_ORIGIN_MAIN",
+        ],
+        errorCode: null,
+      },
+    });
   });
 });
