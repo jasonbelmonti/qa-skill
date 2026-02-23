@@ -53,49 +53,61 @@ function requireSchemaId(schema: AnySchemaObject, key: SchemaKey): string {
   return schema.$id;
 }
 
-const commonSchema = loadSchema(COMMON_SCHEMA_RELATIVE_PATH);
+let cachedValidators: Record<SchemaKey, ValidateFunction> | null = null;
 
-const schemaByKey = REGISTERED_SCHEMA_KEYS.reduce(
-  (accumulator, key) => {
-    accumulator[key] = loadSchema(SCHEMA_RELATIVE_PATHS[key]);
-    return accumulator;
-  },
-  {} as Record<SchemaKey, AnySchemaObject>,
-);
+function buildValidators(): Record<SchemaKey, ValidateFunction> {
+  const commonSchema = loadSchema(COMMON_SCHEMA_RELATIVE_PATH);
 
-const ajv = new Ajv2020({
-  allErrors: true,
-  strict: true,
-  allowUnionTypes: true,
-  validateFormats: false,
-});
+  const schemaByKey = REGISTERED_SCHEMA_KEYS.reduce(
+    (accumulator, key) => {
+      accumulator[key] = loadSchema(SCHEMA_RELATIVE_PATHS[key]);
+      return accumulator;
+    },
+    {} as Record<SchemaKey, AnySchemaObject>,
+  );
 
-ajv.addSchema(commonSchema);
+  const ajv = new Ajv2020({
+    allErrors: true,
+    strict: true,
+    allowUnionTypes: true,
+    validateFormats: false,
+  });
 
-for (const key of REGISTERED_SCHEMA_KEYS) {
-  ajv.addSchema(schemaByKey[key]);
+  ajv.addSchema(commonSchema);
+
+  for (const key of REGISTERED_SCHEMA_KEYS) {
+    ajv.addSchema(schemaByKey[key]);
+  }
+
+  return REGISTERED_SCHEMA_KEYS.reduce(
+    (accumulator, key) => {
+      const schemaId = requireSchemaId(schemaByKey[key], key);
+      const validator = ajv.getSchema(schemaId);
+      if (!validator) {
+        throw new SchemaRegistryError(
+          `Unable to compile schema validator for: ${key}`,
+        );
+      }
+
+      accumulator[key] = validator;
+      return accumulator;
+    },
+    {} as Record<SchemaKey, ValidateFunction>,
+  );
 }
 
-const validatorByKey = REGISTERED_SCHEMA_KEYS.reduce(
-  (accumulator, key) => {
-    const schemaId = requireSchemaId(schemaByKey[key], key);
-    const validator = ajv.getSchema(schemaId);
-    if (!validator) {
-      throw new SchemaRegistryError(
-        `Unable to compile schema validator for: ${key}`,
-      );
-    }
+function getValidatorMap(): Record<SchemaKey, ValidateFunction> {
+  if (cachedValidators === null) {
+    cachedValidators = buildValidators();
+  }
 
-    accumulator[key] = validator;
-    return accumulator;
-  },
-  {} as Record<SchemaKey, ValidateFunction>,
-);
+  return cachedValidators;
+}
 
 export function getRegisteredSchemaKeys(): readonly SchemaKey[] {
   return REGISTERED_SCHEMA_KEYS;
 }
 
 export function getSchemaValidator(schemaKey: SchemaKey): ValidateFunction {
-  return validatorByKey[schemaKey];
+  return getValidatorMap()[schemaKey];
 }
