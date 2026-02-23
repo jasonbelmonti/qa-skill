@@ -30,17 +30,26 @@ function validateStringList(
   }
 
   const collected: string[] = [];
-  value.forEach((entry, index) => {
+  for (let index = 0; index < value.length; index += 1) {
     const entryPath = `${path}[${index}]`;
+    if (!(index in value)) {
+      issues.push({
+        path: entryPath,
+        message: "must be a non-empty string",
+      });
+      continue;
+    }
+
+    const entry = value[index];
     if (!isNonEmptyString(entry)) {
       issues.push({
         path: entryPath,
         message: "must be a non-empty string",
       });
-      return;
+      continue;
     }
     collected.push(entry);
-  });
+  }
 
   return collected;
 }
@@ -311,21 +320,30 @@ export function validateLensDefinition(value: unknown): LensContractIssue[] {
     });
   } else {
     const subLensIdSeen = new Set<string>();
-    value.subLenses.forEach((subLens, index) => {
+    for (let index = 0; index < value.subLenses.length; index += 1) {
       const subLensPath = `subLenses[${index}]`;
+      if (!(index in value.subLenses)) {
+        issues.push({
+          path: subLensPath,
+          message: "must be an object",
+        });
+        continue;
+      }
+
+      const subLens = value.subLenses[index];
       const parsed = validateSubLens(subLens, subLensPath, issues);
       if (!parsed) {
-        return;
+        continue;
       }
       if (subLensIdSeen.has(parsed.subLensId)) {
         issues.push({
           path: subLensPath,
           message: `duplicate subLensId: ${parsed.subLensId}`,
         });
-        return;
+        continue;
       }
       subLensIdSeen.add(parsed.subLensId);
-    });
+    }
   }
 
   return issues.sort(compareLensContractIssues);

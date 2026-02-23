@@ -181,6 +181,36 @@ test("assertLensDefinition rejects invalid/partial definitions deterministically
   expect(first.message).toContain("Invalid lens definition:");
 });
 
+test("assertLensDefinition rejects sparse trigger string lists", () => {
+  const sparse = buildLens("consistency-lens", "consistency") as {
+    trigger: { includeGlobs: string[] };
+  };
+  sparse.trigger.includeGlobs = new Array(1) as string[];
+
+  try {
+    assertLensDefinition(sparse);
+    throw new Error("Expected sparse trigger list to be rejected");
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("trigger.includeGlobs[0]");
+  }
+});
+
+test("assertLensDefinition rejects sparse subLens arrays", () => {
+  const sparse = buildLens("consistency-lens", "consistency") as {
+    subLenses: LensDefinition["subLenses"];
+  };
+  sparse.subLenses = new Array(1) as LensDefinition["subLenses"];
+
+  try {
+    assertLensDefinition(sparse);
+    throw new Error("Expected sparse subLenses to be rejected");
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("subLenses[0]");
+  }
+});
+
 test("formatLensContractIssues emits deterministic numbering", () => {
   const formatted = formatLensContractIssues([
     {
