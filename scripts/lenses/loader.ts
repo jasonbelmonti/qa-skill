@@ -244,7 +244,7 @@ export async function loadLensRegistry(
       accumulator[lens.lensId] = lens;
       return accumulator;
     },
-    {} as Record<string, LensDefinition>,
+    Object.create(null) as Record<string, LensDefinition>,
   );
 
   return {

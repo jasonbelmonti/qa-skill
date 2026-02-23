@@ -180,6 +180,23 @@ test("loadLensRegistry validates and normalizes deterministic lens ordering", as
   });
 });
 
+test("loadLensRegistry keeps lensesById safe for prototype-like lens ids", async () => {
+  await withTempDir(async (repoRoot) => {
+    const registry = buildRegistry();
+    registry.lenses[0].lensId = "__proto__";
+    await writeSkillFiles(repoRoot, buildManifest(), registry);
+
+    const loaded = await loadLensRegistry({ repoRoot });
+
+    expect(Object.getPrototypeOf(loaded.lensesById)).toBeNull();
+    expect(Object.keys(loaded.lensesById)).toEqual([
+      "__proto__",
+      "consistency-core",
+    ]);
+    expect(loaded.lensesById["__proto__"]?.title).toBe("Style Core");
+  });
+});
+
 test("loadLensRegistry rejects duplicate lens ids with deterministic issue output", async () => {
   await withTempDir(async (repoRoot) => {
     const registry = buildRegistry();
