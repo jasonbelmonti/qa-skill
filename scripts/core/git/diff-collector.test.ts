@@ -494,3 +494,80 @@ test("collectDiff decodes quoted patch paths without collapsing literal backslas
 
   assertDrained();
 });
+
+test("collectDiff normalizes quoted --name-only paths to match hunk file paths", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: "\"tab\\tfile.txt\"\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        'diff --git "a/tab\\tfile.txt" "b/tab\\tfile.txt"',
+        '--- "a/tab\\tfile.txt"',
+        '+++ "b/tab\\tfile.txt"',
+        "@@ -1 +1 @@",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.changedFiles).toEqual(["tab\tfile.txt"]);
+  expect(result.hunks.map((hunk) => hunk.filePath)).toEqual(["tab\tfile.txt"]);
+
+  assertDrained();
+});

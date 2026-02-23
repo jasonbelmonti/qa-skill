@@ -135,6 +135,14 @@ function normalizePatchPath(value: string): string | null {
   return normalized;
 }
 
+function normalizeNameOnlyPath(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    return decodeGitQuotedPath(value.slice(1, -1));
+  }
+
+  return value;
+}
+
 function parseDiffHunks(
   diffOutput: string,
   baseRef: string,
@@ -344,6 +352,7 @@ export async function collectDiff(
   const changedFiles = uniqueSorted(
     changedFilesResult.stdout
       .split(/\r?\n/)
+      .map(normalizeNameOnlyPath)
       .filter((line) => line.length > 0),
   );
 
