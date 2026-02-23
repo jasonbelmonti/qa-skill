@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -48,7 +48,7 @@ function parseLastJsonLine(output: string): Record<string, unknown> {
   return jsonLine;
 }
 
-function runGit(repoRoot: string, args: string[]): void {
+function runGit(repoRoot: string, args: string[]): string {
   const result = Bun.spawnSync(["git", "-C", repoRoot, ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -59,6 +59,8 @@ function runGit(repoRoot: string, args: string[]): void {
       `git ${args.join(" ")} failed: ${decode(result.stderr).trim()}`,
     );
   }
+
+  return decode(result.stdout).trim();
 }
 
 async function initFallbackRepo(repoRoot: string): Promise<void> {
@@ -73,6 +75,59 @@ async function initFallbackRepo(repoRoot: string): Promise<void> {
 
   // Simulate a fetched remote main branch while origin/HEAD is unavailable.
   runGit(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+}
+
+function buildLines(prefix: string, count: number): string {
+  return `${Array.from({ length: count }, (_value, index) => `${prefix}-${index + 1}`).join("\n")}\n`;
+}
+
+async function initDiffFixtureRepo(repoRoot: string): Promise<{ baseRef: string }> {
+  await mkdir(repoRoot, { recursive: true });
+  runGit(repoRoot, ["init"]);
+  runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
+  runGit(repoRoot, ["config", "user.name", "QA Skill"]);
+
+  await mkdir(join(repoRoot, "src"), { recursive: true });
+  await mkdir(join(repoRoot, "docs"), { recursive: true });
+
+  await writeFile(join(repoRoot, "src", "app.ts"), "export const value = 1;\n", "utf8");
+  await writeFile(join(repoRoot, "docs", "README.md"), "# Base\n", "utf8");
+  runGit(repoRoot, ["add", "-A"]);
+  runGit(repoRoot, ["commit", "-m", "base"]);
+
+  const baseRef = runGit(repoRoot, ["rev-parse", "HEAD"]);
+
+  await writeFile(
+    join(repoRoot, "src", "app.ts"),
+    "export const value = 2;\nexport function computeDigest() { return value; }\n",
+    "utf8",
+  );
+  await writeFile(join(repoRoot, "docs", "README.md"), "# Updated\n## Deterministic\n", "utf8");
+  await writeFile(join(repoRoot, "Dockerfile"), "FROM node:20-alpine\n", "utf8");
+  runGit(repoRoot, ["add", "-A"]);
+  runGit(repoRoot, ["commit", "-m", "head"]);
+
+  return { baseRef };
+}
+
+async function initLargeRewriteRepo(repoRoot: string): Promise<{ baseRef: string }> {
+  await mkdir(repoRoot, { recursive: true });
+  runGit(repoRoot, ["init"]);
+  runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
+  runGit(repoRoot, ["config", "user.name", "QA Skill"]);
+
+  await mkdir(join(repoRoot, "src"), { recursive: true });
+  await writeFile(join(repoRoot, "src", "huge.ts"), buildLines("before", 6100), "utf8");
+  runGit(repoRoot, ["add", "-A"]);
+  runGit(repoRoot, ["commit", "-m", "base"]);
+
+  const baseRef = runGit(repoRoot, ["rev-parse", "HEAD"]);
+
+  await writeFile(join(repoRoot, "src", "huge.ts"), buildLines("after", 6100), "utf8");
+  runGit(repoRoot, ["add", "-A"]);
+  runGit(repoRoot, ["commit", "-m", "rewrite"]);
+
+  return { baseRef };
 }
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
@@ -199,6 +254,130 @@ test("qa:run emits warning lines before success when baseRef falls back to origi
     ]);
     expect(trace.baseRefResolution.errorCode).toBeNull();
     expect(trace.baseRefResolution.resolvedBaseRef).toBe("origin/main");
+  });
+});
+
+test("qa:run writes deterministic diff analysis into trace artifacts", async () => {
+  await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "diff-repo");
+    const { baseRef } = await initDiffFixtureRepo(repoRoot);
+
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          repoRoot,
+          baseRef,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = runQa(["--config", configPath, "--out", outPath]);
+    expect(result.exitCode).toBe(0);
+
+    const trace = JSON.parse(await readFile(resolve(outPath, "trace.json"), "utf8"));
+    expect(trace.diffAnalysis).toBeDefined();
+    expect(trace.diffAnalysis.diff.changedFiles).toEqual([
+      "Dockerfile",
+      "docs/README.md",
+      "src/app.ts",
+    ]);
+    expect(trace.diffAnalysis.diff.hunks.length).toBeGreaterThan(0);
+
+    const byPath = new Map(
+      (trace.diffAnalysis.changeSurface.files as Array<Record<string, unknown>>).map(
+        (file) => [file.filePath as string, file],
+      ),
+    );
+    expect(byPath.get("src/app.ts")).toMatchObject({
+      bucket: "source",
+      scope: "app",
+      language: "typescript",
+    });
+    expect(byPath.get("docs/README.md")).toMatchObject({
+      bucket: "docs",
+      scope: "docs",
+      language: "markdown",
+    });
+    expect(byPath.get("Dockerfile")).toMatchObject({
+      bucket: "infra",
+      scope: "infra",
+    });
+
+    expect(trace.diffAnalysis.contextBounds.warningCodes).toEqual([]);
+    expect(trace.diffAnalysis.contextBounds.omittedFiles).toEqual([]);
+  });
+});
+
+test("qa:run explicitly reports omitted files when context bounds are exceeded", async () => {
+  await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "large-repo");
+    const { baseRef } = await initLargeRewriteRepo(repoRoot);
+
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          repoRoot,
+          baseRef,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = runQa(["--config", configPath, "--out", outPath]);
+    expect(result.exitCode).toBe(0);
+
+    const trace = JSON.parse(await readFile(resolve(outPath, "trace.json"), "utf8"));
+    expect(trace.diffAnalysis.contextBounds.warningCodes).toEqual([
+      "CONTEXT_BOUND_EXCEEDED",
+    ]);
+    expect(trace.diffAnalysis.contextBounds.omittedFiles).toEqual(["src/huge.ts"]);
+    expect(trace.diffAnalysis.contextBounds.omittedHunks.length).toBeGreaterThan(0);
+  });
+});
+
+test("qa:run diff analysis artifacts are deterministic across repeated runs", async () => {
+  await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "deterministic-repo");
+    const { baseRef } = await initDiffFixtureRepo(repoRoot);
+
+    const configPath = join(tempDir, "config.json");
+    const outA = join(tempDir, "run-a");
+    const outB = join(tempDir, "run-b");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          repoRoot,
+          baseRef,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outA]);
+    const second = runQa(["--config", configPath, "--out", outB]);
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+
+    const firstTrace = await readFile(resolve(outA, "trace.json"), "utf8");
+    const secondTrace = await readFile(resolve(outB, "trace.json"), "utf8");
+    expect(firstTrace).toBe(secondTrace);
   });
 });
 
@@ -351,6 +530,56 @@ test("qa:run writes trace and deterministic code when configured baseRef is inva
         errorCode: "BASE_REF_CONFIGURED_NOT_FOUND",
       },
     });
+  });
+});
+
+test("qa:run maps missing headRef in diff collection to deterministic validation error without partial artifacts", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          baseRef: "HEAD",
+          headRef: "refs/heads/does-not-exist",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPath]);
+    expect(first.exitCode).toBe(3);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    expect(firstPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(firstPayload.deterministicCode).toBe("BASE_REF_RESOLUTION_FAILED");
+
+    const entriesAfterFailure = await readdir(outPath);
+    expect(entriesAfterFailure).toEqual([]);
+
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          baseRef: "HEAD",
+          headRef: "HEAD",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const second = runQa(["--config", configPath, "--out", outPath]);
+    expect(second.exitCode).toBe(0);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(secondPayload.status).toBe("ok");
   });
 });
 
