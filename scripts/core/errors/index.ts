@@ -1,15 +1,17 @@
 import { stableStringify } from "../../utils/canonical-json";
 import { EXIT_CODE_BY_ERROR } from "./constants";
-import type { CliErrorCode } from "./types";
+import type { CliErrorCode, CliErrorOptions } from "./types";
 
 export class CliError extends Error {
   readonly code: CliErrorCode;
   readonly exitCode: number;
+  readonly deterministicCode?: CliErrorOptions["deterministicCode"];
 
-  constructor(code: CliErrorCode, message: string) {
+  constructor(code: CliErrorCode, message: string, options: CliErrorOptions = {}) {
     super(message);
     this.code = code;
     this.exitCode = EXIT_CODE_BY_ERROR[code];
+    this.deterministicCode = options.deterministicCode;
   }
 }
 
@@ -25,10 +27,18 @@ export function toCliError(value: unknown): CliError {
 }
 
 export function formatCliErrorLine(error: CliError): string {
-  return (
-    stableStringify({
-      code: error.code,
-      message: error.message,
-    }) + "\n"
-  );
+  const payload: {
+    code: CliErrorCode;
+    message: string;
+    deterministicCode?: CliErrorOptions["deterministicCode"];
+  } = {
+    code: error.code,
+    message: error.message,
+  };
+
+  if (error.deterministicCode !== undefined) {
+    payload.deterministicCode = error.deterministicCode;
+  }
+
+  return `${stableStringify(payload)}\n`;
 }

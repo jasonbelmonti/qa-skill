@@ -1,12 +1,15 @@
 import { resolve } from "node:path";
 
+import type { BaseRefWarningCode } from "../contracts/error-codes";
 import { stableStringify } from "../utils/canonical-json";
 import { loadConfig } from "../core/config/loader";
 import { formatCliErrorLine, CliError, toCliError } from "../core/errors";
-import { normalizeConfigToSkillInput } from "../core/input/normalize";
+import { BaseRefResolutionError } from "../core/git/types";
+import { normalizeConfigForRun } from "../core/input/normalize";
 import {
   prepareOutputDirectory,
   writeNormalizedInputArtifact,
+  writeTraceArtifact,
 } from "../core/artifacts/output";
 
 interface CliArgs {
@@ -16,6 +19,18 @@ interface CliArgs {
 
 function usageMessage(): string {
   return "Usage: bun run qa:run -- --config <path> --out <runDir>";
+}
+
+function emitBaseRefWarningLines(warningCodes: readonly BaseRefWarningCode[]): void {
+  for (const code of warningCodes) {
+    process.stdout.write(
+      `${stableStringify({
+        level: "warning",
+        phase: "base_ref_resolution",
+        code,
+      })}\n`,
+    );
+  }
 }
 
 export function parseCliArgs(args: string[]): CliArgs {
@@ -66,22 +81,49 @@ export function parseCliArgs(args: string[]): CliArgs {
 }
 
 export async function runCli(args: string[]): Promise<number> {
+  let outDir: string | null = null;
+
   try {
     const parsedArgs = parseCliArgs(args);
     const config = await loadConfig(resolve(parsedArgs.configPath));
-    const normalizedInput = await normalizeConfigToSkillInput(config);
-    const outDir = await prepareOutputDirectory(parsedArgs.outDir);
-    const artifactPath = await writeNormalizedInputArtifact(outDir, normalizedInput);
+
+    outDir = await prepareOutputDirectory(parsedArgs.outDir);
+
+    const normalized = await normalizeConfigForRun(config);
+    const artifactPath = await writeNormalizedInputArtifact(outDir, normalized.input);
+    await writeTraceArtifact(outDir, normalized.trace);
+
+    emitBaseRefWarningLines(normalized.trace.baseRefResolution.warningCodes);
 
     const successLine = stableStringify({
       status: "ok",
       artifactPath,
-      configHash: normalizedInput.configHash,
+      configHash: normalized.input.configHash,
     });
 
     process.stdout.write(`${successLine}\n`);
     return 0;
   } catch (error) {
+    if (error instanceof BaseRefResolutionError) {
+      if (outDir !== null) {
+        try {
+          await writeTraceArtifact(outDir, error.toTraceArtifact());
+        } catch (traceWriteError) {
+          const writeError = toCliError(traceWriteError);
+          process.stdout.write(formatCliErrorLine(writeError));
+          return writeError.exitCode;
+        }
+      }
+
+      emitBaseRefWarningLines(error.warningCodes);
+
+      const cliError = new CliError("CONFIG_VALIDATION_ERROR", error.message, {
+        deterministicCode: error.deterministicCode,
+      });
+      process.stdout.write(formatCliErrorLine(cliError));
+      return cliError.exitCode;
+    }
+
     const cliError = toCliError(error);
     process.stdout.write(formatCliErrorLine(cliError));
     return cliError.exitCode;
