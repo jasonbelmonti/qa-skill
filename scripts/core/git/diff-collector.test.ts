@@ -323,3 +323,174 @@ test("collectDiff consumes deterministic command sequence with injected runner",
 
   assertDrained();
 });
+
+test("collectDiff preserves leading and trailing whitespace in changed file names", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: " lead.ts\ntrail .ts\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        'diff --git "a/ lead.ts" "b/ lead.ts"',
+        '--- "a/ lead.ts"',
+        '+++ "b/ lead.ts"',
+        "@@ -1 +1 @@",
+        'diff --git "a/trail .ts" "b/trail .ts"',
+        '--- "a/trail .ts"',
+        '+++ "b/trail .ts"',
+        "@@ -1 +1 @@",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.changedFiles).toEqual([" lead.ts", "trail .ts"]);
+  expect(result.hunks.map((hunk) => hunk.filePath)).toEqual([
+    " lead.ts",
+    "trail .ts",
+  ]);
+
+  assertDrained();
+});
+
+test("collectDiff decodes quoted patch paths without collapsing literal backslashes", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: "slash\\\\n.txt\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        'diff --git "a/slash\\\\\\\\n.txt" "b/slash\\\\\\\\n.txt"',
+        '--- "a/slash\\\\\\\\n.txt"',
+        '+++ "b/slash\\\\\\\\n.txt"',
+        "@@ -1 +1 @@",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.changedFiles).toEqual(["slash\\\\n.txt"]);
+  expect(result.hunks).toEqual([
+    {
+      filePath: "slash\\\\n.txt",
+      hunkOrdinal: 0,
+      oldStart: 1,
+      oldLines: 1,
+      newStart: 1,
+      newLines: 1,
+      header: "@@ -1 +1 @@",
+    },
+  ]);
+
+  assertDrained();
+});

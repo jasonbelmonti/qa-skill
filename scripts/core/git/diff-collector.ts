@@ -57,19 +57,75 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
+function decodeGitQuotedPath(value: string): string {
+  let decoded = "";
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+
+    if (char !== "\\") {
+      decoded += char;
+      continue;
+    }
+
+    const next = value[index + 1];
+    if (next === undefined) {
+      decoded += "\\";
+      continue;
+    }
+
+    if (next >= "0" && next <= "7") {
+      let octal = next;
+      let octalIndex = index + 2;
+
+      while (octalIndex < value.length && octal.length < 3) {
+        const candidate = value[octalIndex];
+        if (candidate < "0" || candidate > "7") {
+          break;
+        }
+        octal += candidate;
+        octalIndex += 1;
+      }
+
+      decoded += String.fromCharCode(Number.parseInt(octal, 8));
+      index = octalIndex - 1;
+      continue;
+    }
+
+    const escapeMap: Record<string, string> = {
+      a: "\u0007",
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      v: "\u000B",
+      '"': '"',
+      "\\": "\\",
+    };
+
+    if (Object.prototype.hasOwnProperty.call(escapeMap, next)) {
+      decoded += escapeMap[next];
+      index += 1;
+      continue;
+    }
+
+    // Unknown escape sequences are treated literally to avoid data loss.
+    decoded += next;
+    index += 1;
+  }
+
+  return decoded;
+}
+
 function normalizePatchPath(value: string): string | null {
-  let normalized = value.trim();
+  let normalized = value;
   if (normalized === "/dev/null") {
     return null;
   }
 
   if (normalized.startsWith('"') && normalized.endsWith('"') && normalized.length >= 2) {
-    normalized = normalized.slice(1, -1);
-    normalized = normalized
-      .replace(/\\\\/g, "\\")
-      .replace(/\\"/g, '"')
-      .replace(/\\t/g, "\t")
-      .replace(/\\n/g, "\n");
+    normalized = decodeGitQuotedPath(normalized.slice(1, -1));
   }
 
   if (normalized.startsWith("a/") || normalized.startsWith("b/")) {
@@ -288,7 +344,6 @@ export async function collectDiff(
   const changedFiles = uniqueSorted(
     changedFilesResult.stdout
       .split(/\r?\n/)
-      .map((line) => line.trim())
       .filter((line) => line.length > 0),
   );
 
