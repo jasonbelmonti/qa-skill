@@ -110,6 +110,25 @@ test("resolveBaseRef fails immediately when configured baseRef is missing", asyn
   assertDrained();
 });
 
+test("resolveBaseRef maps git runner launch failures to deterministic resolution error", async () => {
+  const runGitCommand: GitCommandRunner = async () => {
+    throw new Error("spawn git ENOENT");
+  };
+
+  try {
+    await resolveBaseRef("/repo", "refs/heads/main", {
+      runGitCommand,
+    });
+    throw new Error("Expected resolveBaseRef to throw");
+  } catch (error) {
+    expect(error).toBeInstanceOf(BaseRefResolutionError);
+    const resolutionError = error as BaseRefResolutionError;
+    expect(resolutionError.deterministicCode).toBe("BASE_REF_RESOLUTION_FAILED");
+    expect(resolutionError.requestedBaseRef).toBe("refs/heads/main");
+    expect(resolutionError.warningCodes).toEqual([]);
+  }
+});
+
 test("resolveBaseRef resolves origin/HEAD when available", async () => {
   const { runGitCommand, assertDrained } = createSequenceRunner([
     {

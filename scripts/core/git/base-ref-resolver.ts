@@ -34,15 +34,42 @@ async function defaultRunGitCommand(
   };
 }
 
+async function runGitCommandSafely(
+  repoRoot: string,
+  args: string[],
+  runGitCommand: GitCommandRunner,
+  requestedBaseRef: string | null,
+  warningCodes: BaseRefResolutionResult["warningCodes"],
+): Promise<GitCommandResult> {
+  try {
+    return await runGitCommand({
+      repoRoot,
+      args,
+    });
+  } catch {
+    throw new BaseRefResolutionError(
+      "BASE_REF_RESOLUTION_FAILED",
+      "Unable to execute git while resolving baseRef",
+      requestedBaseRef,
+      [...warningCodes],
+    );
+  }
+}
+
 async function resolveCommitRef(
   repoRoot: string,
   ref: string,
   runGitCommand: GitCommandRunner,
+  requestedBaseRef: string | null,
+  warningCodes: BaseRefResolutionResult["warningCodes"],
 ): Promise<boolean> {
-  const result = await runGitCommand({
+  const result = await runGitCommandSafely(
     repoRoot,
-    args: ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
-  });
+    ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+    runGitCommand,
+    requestedBaseRef,
+    warningCodes,
+  );
 
   return result.exitCode === 0;
 }
@@ -50,18 +77,31 @@ async function resolveCommitRef(
 async function resolveOriginHeadTarget(
   repoRoot: string,
   runGitCommand: GitCommandRunner,
+  requestedBaseRef: string | null,
+  warningCodes: BaseRefResolutionResult["warningCodes"],
 ): Promise<string | null> {
-  const result = await runGitCommand({
+  const result = await runGitCommandSafely(
     repoRoot,
-    args: ["symbolic-ref", "--quiet", ORIGIN_HEAD_SYMBOLIC_REF],
-  });
+    ["symbolic-ref", "--quiet", ORIGIN_HEAD_SYMBOLIC_REF],
+    runGitCommand,
+    requestedBaseRef,
+    warningCodes,
+  );
 
   if (result.exitCode !== 0 || result.stdout.length === 0) {
     return null;
   }
 
   const ref = result.stdout;
-  if (!(await resolveCommitRef(repoRoot, ref, runGitCommand))) {
+  if (
+    !(await resolveCommitRef(
+      repoRoot,
+      ref,
+      runGitCommand,
+      requestedBaseRef,
+      warningCodes,
+    ))
+  ) {
     return null;
   }
 
@@ -76,7 +116,13 @@ export async function resolveBaseRef(
   const runGitCommand = options.runGitCommand ?? defaultRunGitCommand;
 
   if (configuredBaseRef !== null) {
-    const found = await resolveCommitRef(repoRoot, configuredBaseRef, runGitCommand);
+    const found = await resolveCommitRef(
+      repoRoot,
+      configuredBaseRef,
+      runGitCommand,
+      configuredBaseRef,
+      [],
+    );
 
     if (!found) {
       throw new BaseRefResolutionError(
@@ -95,7 +141,12 @@ export async function resolveBaseRef(
 
   const warningCodes: BaseRefResolutionResult["warningCodes"] = [];
 
-  const originHead = await resolveOriginHeadTarget(repoRoot, runGitCommand);
+  const originHead = await resolveOriginHeadTarget(
+    repoRoot,
+    runGitCommand,
+    null,
+    warningCodes,
+  );
   if (originHead !== null) {
     return {
       requestedBaseRef: null,
@@ -106,7 +157,13 @@ export async function resolveBaseRef(
 
   warningCodes.push("BASE_REF_FALLBACK_ORIGIN_HEAD_UNAVAILABLE");
 
-  const hasOriginMain = await resolveCommitRef(repoRoot, ORIGIN_MAIN_REF, runGitCommand);
+  const hasOriginMain = await resolveCommitRef(
+    repoRoot,
+    ORIGIN_MAIN_REF,
+    runGitCommand,
+    null,
+    warningCodes,
+  );
   if (hasOriginMain) {
     warningCodes.push("BASE_REF_FALLBACK_ORIGIN_MAIN");
     return {
@@ -116,7 +173,13 @@ export async function resolveBaseRef(
     };
   }
 
-  const hasOriginMaster = await resolveCommitRef(repoRoot, ORIGIN_MASTER_REF, runGitCommand);
+  const hasOriginMaster = await resolveCommitRef(
+    repoRoot,
+    ORIGIN_MASTER_REF,
+    runGitCommand,
+    null,
+    warningCodes,
+  );
   if (hasOriginMaster) {
     warningCodes.push("BASE_REF_FALLBACK_ORIGIN_MASTER");
     return {
