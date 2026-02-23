@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/skill-result.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "skill-result.v1"
+    },
+    "executionKey": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/sha256HexString"
+    },
+    "normalizedInputHash": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/sha256HexString"
+    },
+    "lensPlans": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/lens-plan.v1.json"
+      }
+    },
+    "lensResults": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/lens-result.v1.json"
+      }
+    },
+    "finalVerdict": {
+      "$ref": "https://qa-skill.local/schemas/v1/final-verdict.v1.json"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "executionKey",
+    "normalizedInputHash",
+    "lensPlans",
+    "lensResults",
+    "finalVerdict"
+  ]
+}

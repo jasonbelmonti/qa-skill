@@ -1,16 +1,27 @@
-export type SchemaVersion = "skill-input.v1";
+import type {
+  ArtifactSchemaVersion,
+  LensClass,
+  PermissionProfileId,
+  RunMode,
+} from "./common";
 
-export type RunMode = "strict" | "best_effort";
-export type LensClass =
-  | "consistency"
-  | "security"
-  | "architecture"
-  | "style"
-  | "performance";
-export type PermissionProfileId =
-  | "read_only"
-  | "exec_sandboxed"
-  | "exec_sandboxed_network_off";
+export type SchemaVersion = ArtifactSchemaVersion;
+
+export type {
+  ArtifactSchemaVersion,
+  BlockingPolicy,
+  ErrorCode,
+  ExecutionCwdMode,
+  LensClass,
+  LensStatus,
+  OverflowPolicy,
+  PermissionProfileId,
+  RunMode,
+  Severity,
+  UsageMetrics,
+  UsageUnavailableReason,
+  VerdictStatus,
+} from "./common";
 
 export interface ProviderBinding {
   bindingId: string;
@@ -39,7 +50,7 @@ export interface PermissionProfile {
 }
 
 export interface SkillInput {
-  schemaVersion: SchemaVersion;
+  schemaVersion: "skill-input.v1";
   repoId: string;
   repoRoot: string;
   vcs: "git";

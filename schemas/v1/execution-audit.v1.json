@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/execution-audit.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "execution-audit.v1"
+    },
+    "permissionProfileId": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/permissionProfileId"
+    },
+    "worktreePath": {
+      "type": ["string", "null"]
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/executionCommandResult"
+      }
+    }
+  },
+  "required": ["schemaVersion", "permissionProfileId", "worktreePath", "commands"]
+}

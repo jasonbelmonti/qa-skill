@@ -42,3 +42,29 @@ test("canonicalize omits undefined object keys and normalizes array undefined", 
     keep: 1,
   });
 });
+
+test("stableStringify is deterministic for artifact-shaped payloads", () => {
+  const a = {
+    finalVerdict: {
+      status: "PASS",
+      degraded: false,
+      schemaVersion: "final-verdict.v1",
+      rationale: ["All required lenses completed"],
+    },
+    executionKey: "a".repeat(64),
+    schemaVersion: "skill-result.v1",
+  };
+
+  const b = {
+    schemaVersion: "skill-result.v1",
+    executionKey: "a".repeat(64),
+    finalVerdict: {
+      rationale: ["All required lenses completed"],
+      schemaVersion: "final-verdict.v1",
+      degraded: false,
+      status: "PASS",
+    },
+  };
+
+  expect(stableStringify(a)).toBe(stableStringify(b));
+});

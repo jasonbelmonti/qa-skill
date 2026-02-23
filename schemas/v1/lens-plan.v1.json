@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/lens-plan.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "lens-plan.v1"
+    },
+    "planOrdinal": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lensId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subLensId": {
+      "type": ["string", "null"]
+    },
+    "lensVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lensClass": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/lensClass"
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "blockingPolicy": {
+      "type": "string",
+      "enum": ["rule_defined", "severity_threshold", "mixed"]
+    },
+    "providerBindingId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "permissionProfileId": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/permissionProfileId"
+    },
+    "changedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "fullContextFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "omittedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scopeDigest": {
+      "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/sha256HexString"
+    },
+    "executionCommands": {
+      "type": "array",
+      "items": {
+        "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/executionCommandSpec"
+      }
+    },
+    "maxInputTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "maxOutputTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "maxCostUsd": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "overflowPolicy": {
+      "type": "string",
+      "enum": ["stop", "skip", "escalate"]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "planOrdinal",
+    "lensId",
+    "subLensId",
+    "lensVersion",
+    "lensClass",
+    "required",
+    "blockingPolicy",
+    "providerBindingId",
+    "permissionProfileId",
+    "changedFiles",
+    "fullContextFiles",
+    "omittedFiles",
+    "scopeDigest",
+    "executionCommands",
+    "maxInputTokens",
+    "maxOutputTokens",
+    "maxCostUsd",
+    "overflowPolicy"
+  ]
+}

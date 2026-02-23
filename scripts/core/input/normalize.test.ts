@@ -200,6 +200,35 @@ test("normalizeConfigToSkillInput rejects repoRoot values that resolve to files"
   });
 });
 
+test("normalizeConfigToSkillInput rejects schema-invalid normalized payload", async () => {
+  await withTempDir(async (testDir) => {
+    try {
+      await normalizeConfigToSkillInput(
+        {
+          maxConcurrency: 0,
+        },
+        createNormalizeOptions(testDir, {
+          getOriginRemoteUrl: async () => null,
+          resolveBaseRef: async (
+            _repoRoot: string,
+            configuredBaseRef: string | null | undefined,
+          ): Promise<BaseRefResolutionResult> => ({
+            requestedBaseRef: configuredBaseRef ?? null,
+            resolvedBaseRef: "origin/main",
+            warningCodes: [],
+          }),
+        }),
+      );
+      throw new Error("Expected normalizeConfigToSkillInput to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("ARTIFACT_SCHEMA_INVALID");
+      expect(cliError.message).toContain("skill-input.v1");
+    }
+  });
+});
+
 test("normalizeConfigForRun emits trace with deterministic warning codes", async () => {
   await withTempDir(async (testDir) => {
     const normalized = await normalizeConfigForRun(

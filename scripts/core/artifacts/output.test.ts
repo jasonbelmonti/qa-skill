@@ -128,3 +128,25 @@ test("prepareOutputDirectory validates emptiness after mkdir", async () => {
     }
   });
 });
+
+test("writeNormalizedInputArtifact rejects schema-invalid skill input", async () => {
+  await withTempDir(async (tempDir) => {
+    const outDir = join(tempDir, "out");
+    await mkdir(outDir, { recursive: true });
+
+    const invalidInput = {
+      ...buildSkillInput(),
+      maxConcurrency: 0,
+    };
+
+    try {
+      await writeNormalizedInputArtifact(outDir, invalidInput);
+      throw new Error("Expected writeNormalizedInputArtifact to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("ARTIFACT_SCHEMA_INVALID");
+      expect(cliError.message).toContain("skill-input.v1");
+    }
+  });
+});

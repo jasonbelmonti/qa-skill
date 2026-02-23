@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/defs/common.v1.json",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false,
+  "$defs": {
+    "sha256HexString": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runMode": {
+      "type": "string",
+      "enum": ["strict", "best_effort"]
+    },
+    "verdictStatus": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"]
+    },
+    "lensClass": {
+      "type": "string",
+      "enum": ["consistency", "security", "architecture", "style", "performance"]
+    },
+    "lensStatus": {
+      "type": "string",
+      "enum": ["completed", "degraded", "failed", "skipped"]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "permissionProfileId": {
+      "type": "string",
+      "enum": ["read_only", "exec_sandboxed", "exec_sandboxed_network_off"]
+    },
+    "usageUnavailableReason": {
+      "type": "string",
+      "enum": ["PROVIDER_NOT_SUPPORTED", "MISSING_USAGE_DATA", "ADAPTER_ERROR"]
+    },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "BASE_REF_CONFIGURED_NOT_FOUND",
+        "BASE_REF_FALLBACK_ORIGIN_HEAD_UNAVAILABLE",
+        "BASE_REF_FALLBACK_ORIGIN_MAIN",
+        "BASE_REF_FALLBACK_ORIGIN_MASTER",
+        "BASE_REF_RESOLUTION_FAILED",
+        "DIFF_TOO_LARGE",
+        "CONTEXT_BOUND_EXCEEDED",
+        "PLAN_CONFIDENCE_LOW_BROAD_SCAN",
+        "PROVIDER_TIMEOUT",
+        "PROVIDER_RATE_LIMIT",
+        "PROVIDER_AUTH_ERROR",
+        "PROVIDER_UNAVAILABLE",
+        "PROVIDER_USAGE_UNAVAILABLE",
+        "EXECUTION_DENIED",
+        "EXECUTION_POLICY_VIOLATION",
+        "EXECUTION_TIMEOUT",
+        "EXECUTION_EXIT_NONZERO",
+        "EXECUTION_AUDIT_UNAVAILABLE",
+        "LENS_REQUIRED_MISSING",
+        "LENS_REQUIRED_FAILED",
+        "BUDGET_RUN_EXCEEDED",
+        "BUDGET_LENS_EXCEEDED",
+        "ARTIFACT_SCHEMA_INVALID",
+        "DETERMINISM_DRIFT_DETECTED"
+      ]
+    },
+    "usageMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputTokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "totalTokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "costUsd": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usageUnavailableReason"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "totalTokens",
+        "costUsd",
+        "unavailableReason"
+      ]
+    },
+    "permissionProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profileId": {
+          "$ref": "#/$defs/permissionProfileId"
+        },
+        "readOnly": {
+          "type": "boolean"
+        },
+        "allowNetwork": {
+          "type": "boolean"
+        },
+        "worktreeMode": {
+          "type": "string",
+          "enum": ["none", "ephemeral"]
+        },
+        "allowedCommandPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "maxCommandsPerPlan": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "commandTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxStdoutBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxStderrBytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profileId",
+        "readOnly",
+        "allowNetwork",
+        "worktreeMode",
+        "allowedCommandPrefixes",
+        "maxCommandsPerPlan",
+        "commandTimeoutMs",
+        "maxStdoutBytes",
+        "maxStderrBytes"
+      ]
+    },
+    "providerBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bindingId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapterId": {
+          "type": "string",
+          "enum": ["openai-codex", "anthropic-claude"]
+        },
+        "adapterVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "temperature": {
+          "const": 0
+        },
+        "topP": {
+          "const": 1
+        },
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": ["integer", "null"]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retryMax": {
+          "const": 2
+        },
+        "retryBackoffMs": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": 500
+            },
+            {
+              "const": 1500
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "bindingId",
+        "adapterId",
+        "adapterVersion",
+        "modelId",
+        "temperature",
+        "topP",
+        "maxTokens",
+        "seed",
+        "timeoutMs",
+        "retryMax",
+        "retryBackoffMs"
+      ]
+    },
+    "executionCommandSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cwdMode": {
+          "type": "string",
+          "enum": ["repo_root", "ephemeral_worktree"]
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["ordinal", "command", "cwdMode", "purpose"]
+    },
+    "executionCommandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exitCode": {
+          "type": ["integer", "null"]
+        },
+        "timedOut": {
+          "type": "boolean"
+        },
+        "stdoutSha256": {
+          "$ref": "#/$defs/sha256HexString"
+        },
+        "stderrSha256": {
+          "$ref": "#/$defs/sha256HexString"
+        }
+      },
+      "required": ["ordinal", "exitCode", "timedOut", "stdoutSha256", "stderrSha256"]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "findingId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lensId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subLensId": {
+          "type": ["string", "null"]
+        },
+        "ruleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "object"
+        },
+        "evidenceHash": {
+          "$ref": "#/$defs/sha256HexString"
+        }
+      },
+      "required": [
+        "findingId",
+        "lensId",
+        "subLensId",
+        "ruleId",
+        "severity",
+        "blocking",
+        "file",
+        "startLine",
+        "endLine",
+        "summary",
+        "evidence",
+        "evidenceHash"
+      ]
+    }
+  }
+}
