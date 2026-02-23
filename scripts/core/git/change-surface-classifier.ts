@@ -228,7 +228,12 @@ function classifyLanguage(filePath: string): ChangeSurfaceLanguage {
     return "unknown";
   }
 
-  if (extension === "ts" || extension === "tsx") {
+  if (
+    extension === "ts" ||
+    extension === "tsx" ||
+    extension === "mts" ||
+    extension === "cts"
+  ) {
     return "typescript";
   }
 
