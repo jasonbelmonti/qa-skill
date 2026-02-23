@@ -10,6 +10,8 @@ import { collectDiff } from "../core/git/diff-collector";
 import { DiffCollectorError } from "../core/git/diff-types";
 import { BaseRefResolutionError } from "../core/git/types";
 import { normalizeConfigForRun } from "../core/input/normalize";
+import { loadLensRegistry } from "../lenses/loader";
+import { resolveRequestedLensIds } from "../lenses/requested-lens-resolver";
 import {
   prepareOutputDirectory,
   writeNormalizedInputArtifact,
@@ -100,6 +102,9 @@ export async function runCli(args: string[]): Promise<number> {
         "Normalized input is missing resolved baseRef",
       );
     }
+
+    const registry = await loadLensRegistry();
+    resolveRequestedLensIds(registry, normalized.input.requestedLensIds);
 
     const diff = await collectDiff(
       normalized.input.repoRoot,
