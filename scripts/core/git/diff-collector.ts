@@ -53,8 +53,16 @@ function resolveCount(value: string | undefined): number {
   return Number.parseInt(value, 10);
 }
 
+function compareStrings(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+
+  return left < right ? -1 : 1;
+}
+
 function uniqueSorted(values: string[]): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+  return [...new Set(values)].sort(compareStrings);
 }
 
 function decodeGitQuotedPath(value: string): string {
@@ -120,6 +128,21 @@ function decodeGitQuotedPath(value: string): string {
 
 function normalizePatchPath(value: string): string | null {
   let normalized = value;
+  if (normalized.startsWith('"')) {
+    // Patch headers can append tab-separated metadata after quoted paths.
+    for (let index = 1; index < normalized.length; index += 1) {
+      if (normalized[index] === '"' && normalized[index - 1] !== "\\") {
+        normalized = normalized.slice(0, index + 1);
+        break;
+      }
+    }
+  } else {
+    const tabIndex = normalized.indexOf("\t");
+    if (tabIndex >= 0) {
+      normalized = normalized.slice(0, tabIndex);
+    }
+  }
+
   if (normalized === "/dev/null") {
     return null;
   }
@@ -212,10 +235,10 @@ function parseDiffHunks(
 
   const sortedHunks = [...hunks].sort((left, right) => {
     return (
-      left.filePath.localeCompare(right.filePath) ||
+      compareStrings(left.filePath, right.filePath) ||
       left.newStart - right.newStart ||
       left.oldStart - right.oldStart ||
-      left.header.localeCompare(right.header)
+      compareStrings(left.header, right.header)
     );
   });
 

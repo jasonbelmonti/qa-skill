@@ -571,3 +571,161 @@ test("collectDiff normalizes quoted --name-only paths to match hunk file paths",
 
   assertDrained();
 });
+
+test("collectDiff strips patch-header tab suffix from unquoted paths", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: "space end .ts\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        "diff --git a/space end .ts b/space end .ts",
+        "--- a/space end .ts\t2026-02-23 00:00:00 +0000",
+        "+++ b/space end .ts\t2026-02-23 00:00:00 +0000",
+        "@@ -1 +1 @@",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.changedFiles).toEqual(["space end .ts"]);
+  expect(result.hunks.map((hunk) => hunk.filePath)).toEqual(["space end .ts"]);
+
+  assertDrained();
+});
+
+test("collectDiff sorts changed files and hunks using binary code-unit ordering", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: "ä.ts\nz.ts\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        "diff --git a/ä.ts b/ä.ts",
+        "--- a/ä.ts",
+        "+++ b/ä.ts",
+        "@@ -1 +1 @@",
+        "diff --git a/z.ts b/z.ts",
+        "--- a/z.ts",
+        "+++ b/z.ts",
+        "@@ -1 +1 @@",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.changedFiles).toEqual(["z.ts", "ä.ts"]);
+  expect(result.hunks.map((hunk) => hunk.filePath)).toEqual(["z.ts", "ä.ts"]);
+
+  assertDrained();
+});
