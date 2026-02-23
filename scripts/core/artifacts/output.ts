@@ -2,6 +2,7 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import type { SkillInput } from "../../contracts/skill-input";
+import type { TraceArtifactV1 } from "../../contracts/trace";
 import { stableStringify } from "../../utils/canonical-json";
 import { CliError } from "../errors";
 import { assertSchema } from "../schema/validate";
@@ -15,6 +16,18 @@ function hasErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+async function writeArtifactFile(path: string, content: string): Promise<void> {
+  try {
+    await writeFile(path, content, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if (hasErrorCode(error, "EEXIST")) {
+      throw new CliError("OUT_DIR_NON_EMPTY", `Output artifact already exists: ${path}`);
+    }
+
+    throw new CliError("ARTIFACT_WRITE_ERROR", `Unable to write artifact file: ${path}`);
+  }
+}
+
 export async function prepareOutputDirectory(outDir: string): Promise<string> {
   const resolvedOutDir = resolve(outDir);
 
@@ -26,7 +39,6 @@ export async function prepareOutputDirectory(outDir: string): Promise<string> {
         `Output path exists and is not a directory: ${resolvedOutDir}`,
       );
     }
-
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -80,21 +92,17 @@ export async function writeNormalizedInputArtifact(
   const artifactPath = join(outDir, "input.normalized.json");
   const content = `${stableStringify(input, { pretty: true })}\n`;
 
-  try {
-    await writeFile(artifactPath, content, { encoding: "utf8", flag: "wx" });
-  } catch (error) {
-    if (hasErrorCode(error, "EEXIST")) {
-      throw new CliError(
-        "OUT_DIR_NON_EMPTY",
-        `Output artifact already exists: ${artifactPath}`,
-      );
-    }
+  await writeArtifactFile(artifactPath, content);
+  return artifactPath;
+}
 
-    throw new CliError(
-      "ARTIFACT_WRITE_ERROR",
-      `Unable to write artifact file: ${artifactPath}`,
-    );
-  }
+export async function writeTraceArtifact(
+  outDir: string,
+  trace: TraceArtifactV1,
+): Promise<string> {
+  const artifactPath = join(outDir, "trace.json");
+  const content = `${stableStringify(trace, { pretty: true })}\n`;
 
+  await writeArtifactFile(artifactPath, content);
   return artifactPath;
 }

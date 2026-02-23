@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "qa-run-config.v1",
+  "runMode": "strict",
+  "maxConcurrency": 4
+}

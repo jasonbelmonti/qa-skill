@@ -9,7 +9,9 @@ import type {
   ProviderBinding,
   SkillInput,
 } from "../../contracts/skill-input";
+import type { TraceArtifactV1 } from "../../contracts/trace";
 import { hashCanonical } from "../../utils/hash";
+import { resolveBaseRef } from "../git/base-ref-resolver";
 import { CliError } from "../errors";
 import { assertSchema } from "../schema/validate";
 import {
@@ -25,7 +27,10 @@ import {
   DEFAULT_RUN_MODE,
   DEFAULT_VCS,
 } from "./constants";
-import type { NormalizeOptions } from "./types";
+import type {
+  NormalizeConfigForRunResult,
+  NormalizeOptions,
+} from "./types";
 
 function clonePermissionProfile(profile: PermissionProfile): PermissionProfile {
   return {
@@ -171,14 +176,18 @@ function ensureDefaultPermissionProfilePresent(
   }
 }
 
-export async function normalizeConfigToSkillInput(
+export async function normalizeConfigForRun(
   config: QaRunConfigV1,
   options: NormalizeOptions = {},
-): Promise<SkillInput> {
+): Promise<NormalizeConfigForRunResult> {
   const cwd = options.cwd ?? process.cwd();
   const resolveRealpath = options.resolveRealpath ?? realpath;
   const getOriginRemoteUrl =
     options.getOriginRemoteUrl ?? defaultGetOriginRemoteUrl;
+  const resolveBaseRefForRun =
+    options.resolveBaseRef ??
+    (async (repoRoot: string, configuredBaseRef: string | null) =>
+      resolveBaseRef(repoRoot, configuredBaseRef));
 
   const repoRootInput = resolve(cwd, config.repoRoot ?? ".");
   let normalizedRepoRoot: string;
@@ -217,6 +226,11 @@ export async function normalizeConfigToSkillInput(
   const repoId =
     config.repoId ?? deriveRepoIdFromRemoteUrl(remoteUrl, normalizedRepoRoot);
 
+  const baseRefResolution = await resolveBaseRefForRun(
+    normalizedRepoRoot,
+    config.baseRef ?? DEFAULT_BASE_REF,
+  );
+
   const permissionProfiles = (
     config.permissionProfiles ?? []
   ).map(clonePermissionProfile);
@@ -244,7 +258,7 @@ export async function normalizeConfigToSkillInput(
     repoId,
     repoRoot: normalizedRepoRoot,
     vcs: DEFAULT_VCS,
-    baseRef: config.baseRef ?? DEFAULT_BASE_REF,
+    baseRef: baseRefResolution.resolvedBaseRef,
     headRef: config.headRef ?? DEFAULT_HEAD_REF,
     runMode: config.runMode ?? DEFAULT_RUN_MODE,
     requestedLensIds: config.requestedLensIds ?? DEFAULT_REQUESTED_LENS_IDS,
@@ -264,13 +278,33 @@ export async function normalizeConfigToSkillInput(
   };
 
   const configHash = hashCanonical(normalizedWithoutHash);
-
-  const normalizedInput: SkillInput = {
+  const input: SkillInput = {
     ...normalizedWithoutHash,
     configHash,
   };
 
-  assertSchema("skill-input.v1", normalizedInput, "ARTIFACT_SCHEMA_INVALID");
+  assertSchema("skill-input.v1", input, "ARTIFACT_SCHEMA_INVALID");
 
-  return normalizedInput;
+  const trace: TraceArtifactV1 = {
+    schemaVersion: "trace.v1",
+    baseRefResolution: {
+      requestedBaseRef: baseRefResolution.requestedBaseRef,
+      resolvedBaseRef: baseRefResolution.resolvedBaseRef,
+      warningCodes: [...baseRefResolution.warningCodes],
+      errorCode: null,
+    },
+  };
+
+  return {
+    input,
+    trace,
+  };
+}
+
+export async function normalizeConfigToSkillInput(
+  config: QaRunConfigV1,
+  options: NormalizeOptions = {},
+): Promise<SkillInput> {
+  const normalized = await normalizeConfigForRun(config, options);
+  return normalized.input;
 }

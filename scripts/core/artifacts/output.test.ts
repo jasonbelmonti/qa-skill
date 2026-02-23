@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import type { SkillInput } from "../../contracts/skill-input";
+import type { TraceArtifactV1 } from "../../contracts/trace";
 import { CliError } from "../errors";
 import {
   prepareOutputDirectory,
   writeNormalizedInputArtifact,
+  writeTraceArtifact,
 } from "./output";
 
 async function withTempDir<T>(fn: (tempDir: string) => Promise<T>): Promise<T> {
@@ -25,7 +27,7 @@ function buildSkillInput(): SkillInput {
     repoId: "acme/qa-skill",
     repoRoot: "/tmp/qa-skill",
     vcs: "git",
-    baseRef: null,
+    baseRef: "origin/main",
     headRef: "HEAD",
     runMode: "strict",
     requestedLensIds: null,
@@ -53,6 +55,18 @@ function buildSkillInput(): SkillInput {
   };
 }
 
+function buildTraceArtifact(): TraceArtifactV1 {
+  return {
+    schemaVersion: "trace.v1",
+    baseRefResolution: {
+      requestedBaseRef: null,
+      resolvedBaseRef: "origin/main",
+      warningCodes: [],
+      errorCode: null,
+    },
+  };
+}
+
 test("writeNormalizedInputArtifact creates artifact exactly once", async () => {
   await withTempDir(async (tempDir) => {
     const outDir = join(tempDir, "out");
@@ -61,10 +75,31 @@ test("writeNormalizedInputArtifact creates artifact exactly once", async () => {
 
     const artifactPath = await writeNormalizedInputArtifact(outDir, input);
     const written = await readFile(artifactPath, "utf8");
-    expect(written).toContain("\"schemaVersion\": \"skill-input.v1\"");
+    expect(written).toContain('"schemaVersion": "skill-input.v1"');
 
     try {
       await writeNormalizedInputArtifact(outDir, input);
+      throw new Error("Expected second write to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("OUT_DIR_NON_EMPTY");
+    }
+  });
+});
+
+test("writeTraceArtifact creates artifact exactly once", async () => {
+  await withTempDir(async (tempDir) => {
+    const outDir = join(tempDir, "out");
+    await mkdir(outDir, { recursive: true });
+    const trace = buildTraceArtifact();
+
+    const artifactPath = await writeTraceArtifact(outDir, trace);
+    const written = await readFile(artifactPath, "utf8");
+    expect(written).toContain('"schemaVersion": "trace.v1"');
+
+    try {
+      await writeTraceArtifact(outDir, trace);
       throw new Error("Expected second write to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(CliError);

@@ -1,3 +1,5 @@
+import type { BaseRefErrorCode } from "../../contracts/error-codes";
+
 export type CliErrorCode =
   | "USAGE_ERROR"
   | "CONFIG_READ_ERROR"
@@ -6,3 +8,7 @@ export type CliErrorCode =
   | "ARTIFACT_SCHEMA_INVALID"
   | "OUT_DIR_NON_EMPTY"
   | "ARTIFACT_WRITE_ERROR";
+
+export interface CliErrorOptions {
+  deterministicCode?: BaseRefErrorCode;
+}
