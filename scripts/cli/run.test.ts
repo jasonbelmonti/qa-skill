@@ -495,6 +495,70 @@ test("qa:run returns validation error for invalid repoRoot path", async () => {
   });
 });
 
+test("qa:run rejects unknown requestedLensIds deterministically before artifact writes", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          requestedLensIds: ["unknown-lens"],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPath]);
+    const second = runQa(["--config", configPath, "--out", outPath]);
+
+    expect(first.exitCode).toBe(3);
+    expect(second.exitCode).toBe(3);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(firstPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(secondPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(firstPayload.message).toBe(secondPayload.message);
+    expect(firstPayload.message).toContain("Requested lens resolution failed");
+    expect(firstPayload.message).toContain("unknown lensId (unknown-lens)");
+
+    const entriesAfterFailure = await readdir(outPath);
+    expect(entriesAfterFailure).toEqual([]);
+  });
+});
+
+test("qa:run accepts valid requestedLensIds subset", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          requestedLensIds: ["style-core"],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = runQa(["--config", configPath, "--out", outPath]);
+    expect(result.exitCode).toBe(0);
+
+    const payload = parseLastJsonLine(result.stdout);
+    expect(payload.status).toBe("ok");
+    expect(await readFile(resolve(outPath, "input.normalized.json"), "utf8")).toContain(
+      '"requestedLensIds": [',
+    );
+  });
+});
+
 test("qa:run writes trace and deterministic code when configured baseRef is invalid", async () => {
   await withTempDir(async (tempDir) => {
     const configPath = join(tempDir, "config.json");
