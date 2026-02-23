@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import type { QaRunConfigV1 } from "../../contracts/config";
 import { CliError } from "../errors";
 import { loadConfig } from "./loader";
 
@@ -18,7 +19,7 @@ async function withTempDir<T>(fn: (tempDir: string) => Promise<T>): Promise<T> {
 test("loadConfig accepts a valid config payload", async () => {
   await withTempDir(async (tempDir) => {
     const configPath = join(tempDir, "config.json");
-    const payload = {
+    const payload: QaRunConfigV1 = {
       schemaVersion: "qa-run-config.v1",
       runMode: "strict",
       maxConcurrency: 4,
@@ -29,6 +30,44 @@ test("loadConfig accepts a valid config payload", async () => {
     const config = await loadConfig(configPath);
 
     expect(config).toEqual(payload);
+  });
+});
+
+test("loadConfig rejects empty command prefix tokens", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          permissionProfiles: [
+            {
+              profileId: "read_only",
+              readOnly: true,
+              allowNetwork: false,
+              worktreeMode: "none",
+              allowedCommandPrefixes: [[]],
+              maxCommandsPerPlan: 0,
+              commandTimeoutMs: 0,
+              maxStdoutBytes: 0,
+              maxStderrBytes: 0,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadConfig(configPath);
+      throw new Error("Expected loadConfig to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      const cliError = error as CliError;
+      expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
+    }
   });
 });
 

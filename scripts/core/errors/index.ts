@@ -1,4 +1,5 @@
 import { stableStringify } from "../../utils/canonical-json";
+import { SchemaRegistryError } from "../schema/registry";
 import { EXIT_CODE_BY_ERROR } from "./constants";
 import type { CliErrorCode } from "./types";
 
@@ -21,6 +22,11 @@ export function toCliError(value: unknown): CliError {
   if (isCliError(value)) {
     return value;
   }
+
+  if (value instanceof SchemaRegistryError) {
+    return new CliError("ARTIFACT_SCHEMA_INVALID", value.message);
+  }
+
   return new CliError("ARTIFACT_WRITE_ERROR", "Unexpected runtime error");
 }
 

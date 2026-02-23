@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import type { AnySchemaObject, ValidateFunction } from "ajv";
 import Ajv2020 from "ajv/dist/2020";
 
+export class SchemaRegistryError extends Error {}
+
 export const REGISTERED_SCHEMA_KEYS = [
   "qa-run-config.v1",
   "skill-input.v1",
@@ -29,13 +31,24 @@ const SCHEMA_RELATIVE_PATHS: Record<SchemaKey, string> = {
 
 function loadSchema(relativePath: string): AnySchemaObject {
   const schemaPath = new URL(relativePath, import.meta.url);
-  const raw = readFileSync(schemaPath, "utf8");
-  return JSON.parse(raw) as AnySchemaObject;
+
+  let raw: string;
+  try {
+    raw = readFileSync(schemaPath, "utf8");
+  } catch {
+    throw new SchemaRegistryError(`Unable to read schema file: ${schemaPath.pathname}`);
+  }
+
+  try {
+    return JSON.parse(raw) as AnySchemaObject;
+  } catch {
+    throw new SchemaRegistryError(`Schema file is not valid JSON: ${schemaPath.pathname}`);
+  }
 }
 
 function requireSchemaId(schema: AnySchemaObject, key: SchemaKey): string {
   if (typeof schema.$id !== "string" || schema.$id.length === 0) {
-    throw new Error(`Missing $id for schema: ${key}`);
+    throw new SchemaRegistryError(`Missing $id for schema: ${key}`);
   }
   return schema.$id;
 }
@@ -68,7 +81,9 @@ const validatorByKey = REGISTERED_SCHEMA_KEYS.reduce(
     const schemaId = requireSchemaId(schemaByKey[key], key);
     const validator = ajv.getSchema(schemaId);
     if (!validator) {
-      throw new Error(`Unable to compile schema validator for: ${key}`);
+      throw new SchemaRegistryError(
+        `Unable to compile schema validator for: ${key}`,
+      );
     }
 
     accumulator[key] = validator;

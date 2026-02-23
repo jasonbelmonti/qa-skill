@@ -1,7 +1,8 @@
 import type { SchemaVersion } from "../../contracts/skill-input";
 import { CliError } from "../errors";
 import type { CliErrorCode } from "../errors/types";
-import { assertSchema, type SchemaKey } from "./validate";
+import type { SchemaKey } from "./registry";
+import { assertSchema } from "./validate";
 
 const SCHEMA_KEY_BY_VERSION: Record<SchemaVersion, SchemaKey> = {
   "skill-input.v1": "skill-input.v1",
@@ -17,7 +18,7 @@ interface VersionedPayload {
 }
 
 export function schemaKeyFromVersion(schemaVersion: string): SchemaKey | null {
-  if (schemaVersion in SCHEMA_KEY_BY_VERSION) {
+  if (Object.prototype.hasOwnProperty.call(SCHEMA_KEY_BY_VERSION, schemaVersion)) {
     return SCHEMA_KEY_BY_VERSION[schemaVersion as SchemaVersion];
   }
 
