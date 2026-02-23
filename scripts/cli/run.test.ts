@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const REPO_ROOT = resolve(import.meta.dir, "..", "..");
+const DEFAULT_MANIFEST_PATH = join(REPO_ROOT, "skill", "manifest.v1.json");
+const DEFAULT_REGISTRY_PATH = join(REPO_ROOT, "skill", "registry.v1.json");
 
 interface ProcessResult {
   exitCode: number;
@@ -63,14 +65,75 @@ function runGit(repoRoot: string, args: string[]): string {
   return decode(result.stdout).trim();
 }
 
-async function initFallbackRepo(repoRoot: string): Promise<void> {
+async function loadDefaultManifest(): Promise<Record<string, unknown>> {
+  const manifestRaw = await readFile(DEFAULT_MANIFEST_PATH, "utf8");
+  return JSON.parse(manifestRaw) as Record<string, unknown>;
+}
+
+async function loadDefaultRegistry(): Promise<Record<string, unknown>> {
+  const registryRaw = await readFile(DEFAULT_REGISTRY_PATH, "utf8");
+  return JSON.parse(registryRaw) as Record<string, unknown>;
+}
+
+function toJsonFileContent(payload: unknown): string {
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
+async function writeSkillFiles(
+  repoRoot: string,
+  options: {
+    manifest?: unknown;
+    registry?: unknown;
+  } = {},
+): Promise<void> {
+  const manifest = options.manifest ?? (await loadDefaultManifest());
+  const registry = options.registry ?? (await loadDefaultRegistry());
+
+  const skillDir = join(repoRoot, "skill");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    join(skillDir, "manifest.v1.json"),
+    toJsonFileContent(manifest),
+    "utf8",
+  );
+  await writeFile(
+    join(skillDir, "registry.v1.json"),
+    toJsonFileContent(registry),
+    "utf8",
+  );
+}
+
+async function initSkillFixtureRepo(
+  repoRoot: string,
+  options: {
+    manifest?: unknown;
+    registry?: unknown;
+  } = {},
+): Promise<void> {
   await mkdir(repoRoot, { recursive: true });
   runGit(repoRoot, ["init"]);
   runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
   runGit(repoRoot, ["config", "user.name", "QA Skill"]);
 
+  await writeSkillFiles(repoRoot, options);
+  await writeFile(join(repoRoot, "README.md"), "fixture\n", "utf8");
+  runGit(repoRoot, ["add", "-A"]);
+  runGit(repoRoot, ["commit", "-m", "init"]);
+}
+
+async function initFallbackRepo(repoRoot: string): Promise<void> {
+  await mkdir(repoRoot, { recursive: true });
+  runGit(repoRoot, ["init"]);
+  runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
+  runGit(repoRoot, ["config", "user.name", "QA Skill"]);
+  await writeSkillFiles(repoRoot);
+
   await writeFile(join(repoRoot, "README.md"), "hello\n", "utf8");
-  runGit(repoRoot, ["add", "README.md"]);
+  runGit(repoRoot, ["add", "-A"]);
   runGit(repoRoot, ["commit", "-m", "init"]);
 
   // Simulate a fetched remote main branch while origin/HEAD is unavailable.
@@ -87,6 +150,7 @@ async function initDiffFixtureRepo(repoRoot: string): Promise<{ baseRef: string 
   runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
   runGit(repoRoot, ["config", "user.name", "QA Skill"]);
 
+  await writeSkillFiles(repoRoot);
   await mkdir(join(repoRoot, "src"), { recursive: true });
   await mkdir(join(repoRoot, "docs"), { recursive: true });
 
@@ -116,6 +180,7 @@ async function initLargeRewriteRepo(repoRoot: string): Promise<{ baseRef: string
   runGit(repoRoot, ["config", "user.email", "qa-skill@example.com"]);
   runGit(repoRoot, ["config", "user.name", "QA Skill"]);
 
+  await writeSkillFiles(repoRoot);
   await mkdir(join(repoRoot, "src"), { recursive: true });
   await writeFile(join(repoRoot, "src", "huge.ts"), buildLines("before", 6100), "utf8");
   runGit(repoRoot, ["add", "-A"]);
@@ -282,6 +347,10 @@ test("qa:run writes deterministic diff analysis into trace artifacts", async () 
     expect(result.exitCode).toBe(0);
 
     const trace = JSON.parse(await readFile(resolve(outPath, "trace.json"), "utf8"));
+    expect(trace.lensSelection).toEqual({
+      requestedLensIds: null,
+      selectedLensIds: ["consistency-core", "style-core"],
+    });
     expect(trace.diffAnalysis).toBeDefined();
     expect(trace.diffAnalysis.diff.changedFiles).toEqual([
       "Dockerfile",
@@ -497,14 +566,24 @@ test("qa:run returns validation error for invalid repoRoot path", async () => {
 
 test("qa:run rejects unknown requestedLensIds deterministically before artifact writes", async () => {
   await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "repo");
+    const registry = await loadDefaultRegistry();
+    registry.lenses = (registry.lenses as Array<Record<string, unknown>>).filter(
+      (lens) => lens.lensId !== "style-core",
+    );
+    await initSkillFixtureRepo(repoRoot, { registry });
+
     const configPath = join(tempDir, "config.json");
-    const outPath = join(tempDir, "run-a");
+    const outPathA = join(tempDir, "run-a");
+    const outPathB = join(tempDir, "run-b");
     await writeFile(
       configPath,
       JSON.stringify(
         {
           schemaVersion: "qa-run-config.v1",
-          requestedLensIds: ["unknown-lens"],
+          repoRoot,
+          baseRef: "HEAD",
+          requestedLensIds: ["style-core"],
         },
         null,
         2,
@@ -512,8 +591,8 @@ test("qa:run rejects unknown requestedLensIds deterministically before artifact 
       "utf8",
     );
 
-    const first = runQa(["--config", configPath, "--out", outPath]);
-    const second = runQa(["--config", configPath, "--out", outPath]);
+    const first = runQa(["--config", configPath, "--out", outPathA]);
+    const second = runQa(["--config", configPath, "--out", outPathB]);
 
     expect(first.exitCode).toBe(3);
     expect(second.exitCode).toBe(3);
@@ -524,15 +603,18 @@ test("qa:run rejects unknown requestedLensIds deterministically before artifact 
     expect(secondPayload.code).toBe("CONFIG_VALIDATION_ERROR");
     expect(firstPayload.message).toBe(secondPayload.message);
     expect(firstPayload.message).toContain("Requested lens resolution failed");
-    expect(firstPayload.message).toContain("unknown lensId (unknown-lens)");
+    expect(firstPayload.message).toContain("unknown lensId (style-core)");
 
-    const entriesAfterFailure = await readdir(outPath);
-    expect(entriesAfterFailure).toEqual([]);
+    expect(await readdir(outPathA)).toEqual([]);
+    expect(await readdir(outPathB)).toEqual([]);
   });
 });
 
-test("qa:run accepts valid requestedLensIds subset", async () => {
+test("qa:run accepts valid requestedLensIds subset with deterministic selected ordering", async () => {
   await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "repo");
+    await initSkillFixtureRepo(repoRoot);
+
     const configPath = join(tempDir, "config.json");
     const outPath = join(tempDir, "run-a");
     await writeFile(
@@ -540,7 +622,9 @@ test("qa:run accepts valid requestedLensIds subset", async () => {
       JSON.stringify(
         {
           schemaVersion: "qa-run-config.v1",
-          requestedLensIds: ["style-core"],
+          repoRoot,
+          baseRef: "HEAD",
+          requestedLensIds: ["style-core", "consistency-core"],
         },
         null,
         2,
@@ -553,9 +637,99 @@ test("qa:run accepts valid requestedLensIds subset", async () => {
 
     const payload = parseLastJsonLine(result.stdout);
     expect(payload.status).toBe("ok");
+    const trace = JSON.parse(await readFile(resolve(outPath, "trace.json"), "utf8"));
+    expect(trace.lensSelection).toEqual({
+      requestedLensIds: ["style-core", "consistency-core"],
+      selectedLensIds: ["consistency-core", "style-core"],
+    });
     expect(await readFile(resolve(outPath, "input.normalized.json"), "utf8")).toContain(
       '"requestedLensIds": [',
     );
+  });
+});
+
+test("qa:run reports deterministic artifact-schema error for invalid manifest payload", async () => {
+  await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "repo");
+    await initSkillFixtureRepo(repoRoot);
+
+    const manifest = await loadDefaultManifest();
+    manifest.schemaVersion = "skill-input.v1";
+    await writeSkillFiles(repoRoot, { manifest });
+
+    const configPath = join(tempDir, "config.json");
+    const outPathA = join(tempDir, "run-a");
+    const outPathB = join(tempDir, "run-b");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          repoRoot,
+          baseRef: "HEAD",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPathA]);
+    const second = runQa(["--config", configPath, "--out", outPathB]);
+
+    expect(first.exitCode).toBe(5);
+    expect(second.exitCode).toBe(5);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(firstPayload.code).toBe("ARTIFACT_SCHEMA_INVALID");
+    expect(secondPayload.code).toBe("ARTIFACT_SCHEMA_INVALID");
+    expect(firstPayload.message).toBe(secondPayload.message);
+    expect(firstPayload.message).toContain("Expected schemaVersion skill-manifest.v1");
+
+    expect(await readdir(outPathA)).toEqual([]);
+    expect(await readdir(outPathB)).toEqual([]);
+  });
+});
+
+test("qa:run reports deterministic artifact-schema error for invalid registry payload", async () => {
+  await withTempDir(async (tempDir) => {
+    const repoRoot = join(tempDir, "repo");
+    await initSkillFixtureRepo(repoRoot);
+    await writeSkillFiles(repoRoot, { registry: "{\n" });
+
+    const configPath = join(tempDir, "config.json");
+    const outPathA = join(tempDir, "run-a");
+    const outPathB = join(tempDir, "run-b");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          repoRoot,
+          baseRef: "HEAD",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPathA]);
+    const second = runQa(["--config", configPath, "--out", outPathB]);
+
+    expect(first.exitCode).toBe(5);
+    expect(second.exitCode).toBe(5);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(firstPayload.code).toBe("ARTIFACT_SCHEMA_INVALID");
+    expect(secondPayload.code).toBe("ARTIFACT_SCHEMA_INVALID");
+    expect(firstPayload.message).toBe(secondPayload.message);
+    expect(firstPayload.message).toContain("Skill registry is not valid JSON");
+
+    expect(await readdir(outPathA)).toEqual([]);
+    expect(await readdir(outPathB)).toEqual([]);
   });
 });
 
