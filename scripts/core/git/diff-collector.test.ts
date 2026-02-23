@@ -729,3 +729,86 @@ test("collectDiff sorts changed files and hunks using binary code-unit ordering"
 
   assertDrained();
 });
+
+test("collectDiff does not treat added +++ lines as file headers across hunks", async () => {
+  const { runGitCommand, assertDrained } = createRunner([
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "base^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "head^{commit}",
+      ],
+      exitCode: 0,
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: "alpha.ts\n",
+    },
+    {
+      args: [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--relative",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--",
+      ],
+      exitCode: 0,
+      stdout: [
+        "diff --git a/alpha.ts b/alpha.ts",
+        "--- a/alpha.ts",
+        "+++ b/alpha.ts",
+        "@@ -1 +1 @@",
+        "+++ value",
+        "@@ -5 +5 @@",
+        "+tail-change",
+        "",
+      ].join("\n"),
+    },
+  ]);
+
+  const result = await collectDiff("/repo", "base", "head", {
+    runGitCommand,
+  });
+
+  expect(result.hunks.map((hunk) => hunk.filePath)).toEqual([
+    "alpha.ts",
+    "alpha.ts",
+  ]);
+  expect(result.hunks.map((hunk) => hunk.newStart)).toEqual([1, 5]);
+
+  assertDrained();
+});

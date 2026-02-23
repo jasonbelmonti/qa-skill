@@ -177,16 +177,18 @@ function parseDiffHunks(
   let minusPath: string | null = null;
   let plusPath: string | null = null;
   let currentFilePath: string | null = null;
+  let inFileHeader = false;
 
   for (const line of lines) {
     if (line.startsWith("diff --git ")) {
       minusPath = null;
       plusPath = null;
       currentFilePath = null;
+      inFileHeader = true;
       continue;
     }
 
-    if (line.startsWith("--- ")) {
+    if (inFileHeader && line.startsWith("--- ")) {
       minusPath = normalizePatchPath(line.slice(4));
       if (minusPath !== null && plusPath === null) {
         currentFilePath = minusPath;
@@ -194,7 +196,7 @@ function parseDiffHunks(
       continue;
     }
 
-    if (line.startsWith("+++ ")) {
+    if (inFileHeader && line.startsWith("+++ ")) {
       plusPath = normalizePatchPath(line.slice(4));
       currentFilePath = plusPath ?? minusPath;
       continue;
@@ -203,6 +205,7 @@ function parseDiffHunks(
     if (!line.startsWith("@@ ")) {
       continue;
     }
+    inFileHeader = false;
 
     if (currentFilePath === null) {
       throw new DiffCollectorError(
