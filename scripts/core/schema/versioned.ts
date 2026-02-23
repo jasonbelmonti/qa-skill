@@ -5,6 +5,8 @@ import type { SchemaKey } from "./registry";
 import { assertSchema } from "./validate";
 
 const SCHEMA_KEY_BY_VERSION: Record<SchemaVersion, SchemaKey> = {
+  "skill-manifest.v1": "skill-manifest.v1",
+  "skill-registry.v1": "skill-registry.v1",
   "skill-input.v1": "skill-input.v1",
   "lens-plan.v1": "lens-plan.v1",
   "lens-result.v1": "lens-result.v1",

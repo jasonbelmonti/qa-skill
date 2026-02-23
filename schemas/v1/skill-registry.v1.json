@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-skill.local/schemas/v1/skill-registry.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "skill-registry.v1"
+    },
+    "skillId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skillVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "orderingRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lenses": {
+          "const": "lensId ASC"
+        },
+        "subLenses": {
+          "const": "subLensId ASC"
+        }
+      },
+      "required": ["lenses", "subLenses"]
+    },
+    "lenses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/lensDefinition"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "skillId",
+    "skillVersion",
+    "orderingRules",
+    "lenses"
+  ],
+  "$defs": {
+    "lensTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "includeGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "excludeGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "pathPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "symbolHints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "minConfidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "includeGlobs",
+        "excludeGlobs",
+        "pathPrefixes",
+        "symbolHints",
+        "minConfidence"
+      ]
+    },
+    "subLensDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subLensId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "blockingPolicy": {
+          "type": "string",
+          "enum": ["rule_defined", "severity_threshold", "mixed"]
+        },
+        "trigger": {
+          "$ref": "#/$defs/lensTrigger"
+        }
+      },
+      "required": [
+        "subLensId",
+        "title",
+        "description",
+        "required",
+        "blockingPolicy",
+        "trigger"
+      ]
+    },
+    "lensDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lensId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lensVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lensClass": {
+          "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/lensClass"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requiredByDefault": {
+          "type": "boolean"
+        },
+        "defaultPermissionProfileId": {
+          "$ref": "https://qa-skill.local/schemas/v1/defs/common.v1.json#/$defs/permissionProfileId"
+        },
+        "trigger": {
+          "$ref": "#/$defs/lensTrigger"
+        },
+        "subLenses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subLensDefinition"
+          }
+        }
+      },
+      "required": [
+        "lensId",
+        "lensVersion",
+        "lensClass",
+        "title",
+        "description",
+        "requiredByDefault",
+        "defaultPermissionProfileId",
+        "trigger",
+        "subLenses"
+      ]
+    }
+  }
+}

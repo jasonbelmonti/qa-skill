@@ -5,7 +5,11 @@ import type {
   RunMode,
 } from "./common";
 
-export type SchemaVersion = ArtifactSchemaVersion;
+export type SkillSchemaVersion =
+  | ArtifactSchemaVersion
+  | "skill-manifest.v1"
+  | "skill-registry.v1";
+export type SchemaVersion = SkillSchemaVersion;
 
 export type {
   ArtifactSchemaVersion,

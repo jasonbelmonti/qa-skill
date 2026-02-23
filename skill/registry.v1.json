@@ -1,0 +1,103 @@
+{
+  "lenses": [
+    {
+      "defaultPermissionProfileId": "read_only",
+      "description": "Repository-level consistency checks informed by project conventions.",
+      "lensClass": "consistency",
+      "lensId": "consistency-core",
+      "lensVersion": "1.0.0",
+      "requiredByDefault": true,
+      "subLenses": [
+        {
+          "blockingPolicy": "rule_defined",
+          "description": "Detect architectural decisions that drift from established module boundaries.",
+          "required": true,
+          "subLensId": "architecture-drift",
+          "title": "Architecture Drift",
+          "trigger": {
+            "excludeGlobs": [],
+            "includeGlobs": ["**/*.ts", "**/*.tsx"],
+            "minConfidence": 0.7,
+            "pathPrefixes": ["scripts/", "src/"],
+            "symbolHints": ["Orchestrator", "Dispatcher"]
+          }
+        },
+        {
+          "blockingPolicy": "rule_defined",
+          "description": "Track consistency with agreed naming/style conventions for maintainability.",
+          "required": false,
+          "subLensId": "style-guides",
+          "title": "Style Guides",
+          "trigger": {
+            "excludeGlobs": ["**/*.snap.ts"],
+            "includeGlobs": ["**/*.ts", "**/*.tsx"],
+            "minConfidence": 0.4,
+            "pathPrefixes": ["scripts/", "src/"],
+            "symbolHints": ["format", "normalize"]
+          }
+        }
+      ],
+      "title": "Consistency Core",
+      "trigger": {
+        "excludeGlobs": ["**/*.md"],
+        "includeGlobs": ["**/*.ts", "**/*.tsx"],
+        "minConfidence": 0.5,
+        "pathPrefixes": ["scripts/", "src/"],
+        "symbolHints": ["deterministic", "lens"]
+      }
+    },
+    {
+      "defaultPermissionProfileId": "read_only",
+      "description": "Style-oriented checks for language-specific conventions and formatting.",
+      "lensClass": "style",
+      "lensId": "style-core",
+      "lensVersion": "1.0.0",
+      "requiredByDefault": false,
+      "subLenses": [
+        {
+          "blockingPolicy": "severity_threshold",
+          "description": "Ensure CSS classes and token naming remain consistent across touched files.",
+          "required": false,
+          "subLensId": "css-naming",
+          "title": "CSS Naming",
+          "trigger": {
+            "excludeGlobs": [],
+            "includeGlobs": ["**/*.css", "**/*.tsx"],
+            "minConfidence": 0.3,
+            "pathPrefixes": ["src/"],
+            "symbolHints": ["className", "styles"]
+          }
+        },
+        {
+          "blockingPolicy": "mixed",
+          "description": "Catch TypeScript formatting and import-order issues in changed files.",
+          "required": false,
+          "subLensId": "typescript-formatting",
+          "title": "TypeScript Formatting",
+          "trigger": {
+            "excludeGlobs": [],
+            "includeGlobs": ["**/*.ts", "**/*.tsx"],
+            "minConfidence": 0.2,
+            "pathPrefixes": ["scripts/", "src/"],
+            "symbolHints": ["import", "type"]
+          }
+        }
+      ],
+      "title": "Style Core",
+      "trigger": {
+        "excludeGlobs": [],
+        "includeGlobs": ["**/*.ts", "**/*.tsx", "**/*.css"],
+        "minConfidence": 0.25,
+        "pathPrefixes": ["scripts/", "src/"],
+        "symbolHints": ["style", "format"]
+      }
+    }
+  ],
+  "orderingRules": {
+    "lenses": "lensId ASC",
+    "subLenses": "subLensId ASC"
+  },
+  "schemaVersion": "skill-registry.v1",
+  "skillId": "qa-skill",
+  "skillVersion": "1.0.0"
+}

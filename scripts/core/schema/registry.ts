@@ -7,6 +7,8 @@ export class SchemaRegistryError extends Error {}
 
 export const REGISTERED_SCHEMA_KEYS = [
   "qa-run-config.v1",
+  "skill-manifest.v1",
+  "skill-registry.v1",
   "skill-input.v1",
   "lens-plan.v1",
   "lens-result.v1",
@@ -21,6 +23,8 @@ const COMMON_SCHEMA_RELATIVE_PATH = "../../../schemas/v1/defs/common.v1.json";
 
 const SCHEMA_RELATIVE_PATHS: Record<SchemaKey, string> = {
   "qa-run-config.v1": "../../../schemas/v1/qa-run-config.v1.json",
+  "skill-manifest.v1": "../../../schemas/v1/skill-manifest.v1.json",
+  "skill-registry.v1": "../../../schemas/v1/skill-registry.v1.json",
   "skill-input.v1": "../../../schemas/v1/skill-input.v1.json",
   "lens-plan.v1": "../../../schemas/v1/lens-plan.v1.json",
   "lens-result.v1": "../../../schemas/v1/lens-result.v1.json",
