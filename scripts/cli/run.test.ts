@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -530,6 +530,56 @@ test("qa:run writes trace and deterministic code when configured baseRef is inva
         errorCode: "BASE_REF_CONFIGURED_NOT_FOUND",
       },
     });
+  });
+});
+
+test("qa:run maps missing headRef in diff collection to deterministic validation error without partial artifacts", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          baseRef: "HEAD",
+          headRef: "refs/heads/does-not-exist",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPath]);
+    expect(first.exitCode).toBe(3);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    expect(firstPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(firstPayload.deterministicCode).toBe("BASE_REF_RESOLUTION_FAILED");
+
+    const entriesAfterFailure = await readdir(outPath);
+    expect(entriesAfterFailure).toEqual([]);
+
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: "qa-run-config.v1",
+          baseRef: "HEAD",
+          headRef: "HEAD",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const second = runQa(["--config", configPath, "--out", outPath]);
+    expect(second.exitCode).toBe(0);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(secondPayload.status).toBe("ok");
   });
 });
 
