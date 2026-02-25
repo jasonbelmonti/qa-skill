@@ -63,6 +63,9 @@ function extractErrorCode(value: unknown): string | null {
   if (typeof code === "string" && code.length > 0) {
     return code;
   }
+  if (typeof code === "number" && Number.isFinite(code)) {
+    return String(code);
+  }
 
   return null;
 }

@@ -144,6 +144,12 @@ function errorWithRawCode(code: string): Error & { code: string } {
   return error;
 }
 
+function errorWithNumericCode(code: number): Error & { code: number } {
+  const error = new Error(`error-${code}`) as Error & { code: number };
+  error.code = code;
+  return error;
+}
+
 test("buildDispatchRetryPolicy uses deterministic binding values", () => {
   const policy = buildDispatchRetryPolicy(
     buildProviderBinding("binding-a", {
@@ -205,6 +211,16 @@ test("classifyDispatchError maps timeout/rate-limit/auth/unknown deterministical
   expect(classifyDispatchError(errorWithRawCode("403"))).toMatchObject({
     code: "PROVIDER_AUTH_ERROR",
     retryable: false,
+  });
+
+  expect(classifyDispatchError(errorWithNumericCode(401))).toMatchObject({
+    code: "PROVIDER_AUTH_ERROR",
+    retryable: false,
+  });
+
+  expect(classifyDispatchError(errorWithNumericCode(429))).toMatchObject({
+    code: "PROVIDER_RATE_LIMIT",
+    retryable: true,
   });
 });
 
@@ -386,6 +402,26 @@ test("runDispatchTaskWithRetry treats 401 error code as non-retriable auth failu
     execute: async (attemptInput) => {
       attemptsObserved.push(attemptInput.attemptOrdinal);
       throw errorWithRawCode("401");
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0]);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_AUTH_ERROR"]);
+});
+
+test("runDispatchTaskWithRetry treats numeric 401 error code as non-retriable auth failure", async () => {
+  const task = buildTask();
+  const attemptsObserved: number[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a"),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      throw errorWithNumericCode(401);
     },
   });
 
