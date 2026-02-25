@@ -11,7 +11,11 @@ import {
   retryDelayMsForAttempt,
   runDispatchTaskWithRetry,
 } from "./retry";
-import type { DispatchTask, DispatchTerminalErrorCode } from "./types";
+import type {
+  DispatchTask,
+  DispatchTerminalErrorCode,
+  RunDispatchTaskResult,
+} from "./types";
 
 const HASH = "a".repeat(64);
 
@@ -331,6 +335,38 @@ test("runDispatchTaskWithRetry maps attempt timeout to deterministic terminal co
   expect(sleepCalls).toEqual([500, 1500]);
   expect(run.attemptsUsed).toBe(3);
   expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_TIMEOUT"]);
+  expect(validateSchema("lens-result.v1", run.result).valid).toBe(true);
+});
+
+test("runDispatchTaskWithRetry does not stall when executor ignores abort signal", async () => {
+  const task = buildTask();
+
+  const run = await Promise.race<RunDispatchTaskResult>([
+    runDispatchTaskWithRetry({
+      skillInput: buildSkillInput(),
+      primaryProviderBinding: buildProviderBinding("binding-a", {
+        timeoutMs: 1,
+        retryMax: 0,
+        retryBackoffMs: [],
+      }),
+      task,
+      sleepMs: async () => undefined,
+      execute: async () => {
+        return await new Promise<LensResult>(() => {
+          // Intentionally ignore abort signal to assert deterministic timeout fallback.
+        });
+      },
+    }),
+    new Promise<RunDispatchTaskResult>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("dispatcher-run-stalled"));
+      }, 200);
+    }),
+  ]);
+
+  expect(run.terminalFailure).toBe(true);
+  expect(run.attemptsUsed).toBe(1);
   expect(run.result.errorCodes).toEqual(["PROVIDER_TIMEOUT"]);
   expect(validateSchema("lens-result.v1", run.result).valid).toBe(true);
 });

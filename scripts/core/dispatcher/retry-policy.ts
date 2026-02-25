@@ -11,6 +11,8 @@ export class DispatchAttemptTimeoutError extends Error {
   }
 }
 
+const ABORT_SETTLE_GRACE_MS = 25;
+
 export function buildDispatchRetryPolicy(binding: ProviderBinding): DispatchRetryPolicy {
   return {
     timeoutMs: binding.timeoutMs,
@@ -50,6 +52,7 @@ export async function withTimeout<T>(
     const abortController = new AbortController();
     let settled = false;
     let timeoutError: DispatchAttemptTimeoutError | null = null;
+    let abortSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
     const settleResolve = (value: T): void => {
       if (settled) {
@@ -57,6 +60,9 @@ export async function withTimeout<T>(
       }
       settled = true;
       clearTimeout(timer);
+      if (abortSettleTimer !== null) {
+        clearTimeout(abortSettleTimer);
+      }
       resolve(value);
     };
 
@@ -66,12 +72,18 @@ export async function withTimeout<T>(
       }
       settled = true;
       clearTimeout(timer);
+      if (abortSettleTimer !== null) {
+        clearTimeout(abortSettleTimer);
+      }
       reject(error);
     };
 
     const timer = setTimeout(() => {
       timeoutError = new DispatchAttemptTimeoutError(timeoutMs);
       abortController.abort(timeoutError);
+      abortSettleTimer = setTimeout(() => {
+        settleReject(timeoutError);
+      }, ABORT_SETTLE_GRACE_MS);
     }, timeoutMs);
 
     let executionPromise: Promise<T>;
