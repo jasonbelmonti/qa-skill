@@ -2,6 +2,7 @@ import { CliError } from "../errors";
 import { assertSchema } from "../schema/validate";
 import { classifyDispatchError } from "./error-classification";
 import {
+  DispatchAttemptTimeoutError,
   buildDispatchRetryPolicy,
   retryDelayMsForAttempt,
   sleepWithTimer,
@@ -9,6 +10,23 @@ import {
 } from "./retry-policy";
 import { assertLensResultIdentity, buildTerminalLensResult } from "./terminal-result";
 import type { RunDispatchTaskInput, RunDispatchTaskResult } from "./types";
+
+async function waitForTimeoutCleanup(error: unknown, maxWaitMs: number): Promise<void> {
+  if (!(error instanceof DispatchAttemptTimeoutError)) {
+    return;
+  }
+  if (maxWaitMs <= 0) {
+    return;
+  }
+
+  await Promise.race([
+    error.cleanupSettled.then(
+      () => undefined,
+      () => undefined,
+    ),
+    sleepWithTimer(maxWaitMs),
+  ]);
+}
 
 export async function runDispatchTaskWithRetry(
   input: RunDispatchTaskInput,
@@ -43,9 +61,11 @@ export async function runDispatchTaskWithRetry(
       const shouldRetry = classification.retryable && attemptOrdinal < policy.retryMax;
       if (shouldRetry) {
         const delayMs = retryDelayMsForAttempt(policy, attemptOrdinal);
-        if (delayMs !== null && delayMs > 0) {
-          await sleepMs(delayMs);
-        }
+        const cleanupWaitMs = Math.max(policy.timeoutMs, delayMs ?? 0);
+        await Promise.all([
+          waitForTimeoutCleanup(error, cleanupWaitMs),
+          delayMs !== null && delayMs > 0 ? sleepMs(delayMs) : Promise.resolve(),
+        ]);
         continue;
       }
 

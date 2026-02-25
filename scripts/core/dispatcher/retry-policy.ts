@@ -3,15 +3,15 @@ import type { DispatchRetryPolicy } from "./types";
 
 export class DispatchAttemptTimeoutError extends Error {
   readonly timeoutMs: number;
+  readonly cleanupSettled: Promise<void>;
 
-  constructor(timeoutMs: number) {
+  constructor(timeoutMs: number, cleanupSettled: Promise<void>) {
     super(`Dispatch attempt timed out after ${timeoutMs}ms`);
     this.name = "DispatchAttemptTimeoutError";
     this.timeoutMs = timeoutMs;
+    this.cleanupSettled = cleanupSettled;
   }
 }
-
-const ABORT_SETTLE_GRACE_MS = 25;
 
 export function buildDispatchRetryPolicy(binding: ProviderBinding): DispatchRetryPolicy {
   return {
@@ -51,8 +51,18 @@ export async function withTimeout<T>(
   return new Promise<T>((resolve, reject) => {
     const abortController = new AbortController();
     let settled = false;
-    let timeoutError: DispatchAttemptTimeoutError | null = null;
-    let abortSettleTimer: ReturnType<typeof setTimeout> | null = null;
+    let markCleanupSettled = () => undefined;
+    let cleanupSettledDone = false;
+
+    const cleanupSettled = new Promise<void>((resolveCleanup) => {
+      markCleanupSettled = () => {
+        if (cleanupSettledDone) {
+          return;
+        }
+        cleanupSettledDone = true;
+        resolveCleanup();
+      };
+    });
 
     const settleResolve = (value: T): void => {
       if (settled) {
@@ -60,9 +70,6 @@ export async function withTimeout<T>(
       }
       settled = true;
       clearTimeout(timer);
-      if (abortSettleTimer !== null) {
-        clearTimeout(abortSettleTimer);
-      }
       resolve(value);
     };
 
@@ -72,41 +79,31 @@ export async function withTimeout<T>(
       }
       settled = true;
       clearTimeout(timer);
-      if (abortSettleTimer !== null) {
-        clearTimeout(abortSettleTimer);
-      }
       reject(error);
     };
 
     const timer = setTimeout(() => {
-      timeoutError = new DispatchAttemptTimeoutError(timeoutMs);
+      const timeoutError = new DispatchAttemptTimeoutError(timeoutMs, cleanupSettled);
       abortController.abort(timeoutError);
-      abortSettleTimer = setTimeout(() => {
-        settleReject(timeoutError);
-      }, ABORT_SETTLE_GRACE_MS);
+      settleReject(timeoutError);
     }, timeoutMs);
 
     let executionPromise: Promise<T>;
     try {
       executionPromise = execute(abortController.signal);
     } catch (error) {
+      markCleanupSettled();
       settleReject(error);
       return;
     }
 
     executionPromise.then(
       (value) => {
-        if (timeoutError !== null) {
-          settleReject(timeoutError);
-          return;
-        }
+        markCleanupSettled();
         settleResolve(value);
       },
       (error) => {
-        if (timeoutError !== null) {
-          settleReject(timeoutError);
-          return;
-        }
+        markCleanupSettled();
         settleReject(error);
       },
     );
