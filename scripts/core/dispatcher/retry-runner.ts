@@ -69,6 +69,8 @@ export async function runDispatchTaskWithRetry(
         continue;
       }
 
+      await waitForTimeoutCleanup(error, policy.timeoutMs);
+
       const usageUnavailableReason =
         classification.code === "PROVIDER_USAGE_UNAVAILABLE"
           ? "MISSING_USAGE_DATA"

@@ -414,6 +414,41 @@ test("runDispatchTaskWithRetry waits for timed-out attempt cleanup before retryi
   expect(run.result.status).toBe("completed");
 });
 
+test("runDispatchTaskWithRetry waits for terminal timeout cleanup before returning", async () => {
+  const task = buildTask();
+  let cleanupSettled = false;
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a", {
+      timeoutMs: 50,
+      retryMax: 0,
+      retryBackoffMs: [],
+    }),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      return await new Promise<LensResult>((_, reject) => {
+        attemptInput.abortSignal.addEventListener(
+          "abort",
+          () => {
+            setTimeout(() => {
+              cleanupSettled = true;
+              reject(new Error("aborted"));
+            }, 10);
+          },
+          { once: true },
+        );
+      });
+    },
+  });
+
+  expect(cleanupSettled).toBe(true);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.attemptsUsed).toBe(1);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_TIMEOUT"]);
+});
+
 test("runDispatchTaskWithRetry uses usage unavailable reason for provider usage failures", async () => {
   const task = buildTask();
   const attemptsObserved: number[] = [];
