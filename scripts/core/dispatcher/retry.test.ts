@@ -138,6 +138,12 @@ function errorWithCode(code: DispatchTerminalErrorCode): Error & { code: string 
   return error;
 }
 
+function errorWithRawCode(code: string): Error & { code: string } {
+  const error = new Error(`error-${code}`) as Error & { code: string };
+  error.code = code;
+  return error;
+}
+
 test("buildDispatchRetryPolicy uses deterministic binding values", () => {
   const policy = buildDispatchRetryPolicy(
     buildProviderBinding("binding-a", {
@@ -184,6 +190,11 @@ test("classifyDispatchError maps timeout/rate-limit/auth/unknown deterministical
   expect(classifyDispatchError(new Error("socket reset"))).toMatchObject({
     code: "PROVIDER_UNAVAILABLE",
     retryable: true,
+  });
+
+  expect(classifyDispatchError(errorWithRawCode("artifact_schema_invalid"))).toMatchObject({
+    code: "ARTIFACT_SCHEMA_INVALID",
+    retryable: false,
   });
 });
 
@@ -265,6 +276,67 @@ test("runDispatchTaskWithRetry maps attempt timeout to deterministic terminal co
   expect(run.terminalFailure).toBe(true);
   expect(run.result.errorCodes).toEqual(["PROVIDER_TIMEOUT"]);
   expect(validateSchema("lens-result.v1", run.result).valid).toBe(true);
+});
+
+test("runDispatchTaskWithRetry aborts timed-out attempts before retrying", async () => {
+  const task = buildTask();
+  let inFlight = 0;
+  const attemptsObserved: number[] = [];
+  const abortSignals: AbortSignal[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a", { timeoutMs: 1 }),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      abortSignals.push(attemptInput.abortSignal);
+
+      if (attemptInput.attemptOrdinal === 1) {
+        expect(inFlight).toBe(0);
+        return buildSuccessfulResult(task.plan);
+      }
+
+      inFlight += 1;
+
+      return await new Promise<LensResult>((_, reject) => {
+        attemptInput.abortSignal.addEventListener(
+          "abort",
+          () => {
+            inFlight -= 1;
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        );
+      });
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0, 1]);
+  expect(abortSignals[0]?.aborted).toBe(true);
+  expect(run.terminalFailure).toBe(false);
+  expect(run.result.status).toBe("completed");
+});
+
+test("runDispatchTaskWithRetry treats lowercase terminal schema code as non-retriable", async () => {
+  const task = buildTask();
+  const attemptsObserved: number[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a"),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      throw errorWithRawCode("artifact_schema_invalid");
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0]);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["ARTIFACT_SCHEMA_INVALID"]);
 });
 
 test("runDispatchTaskWithRetry treats invalid executor payload as terminal schema error", async () => {

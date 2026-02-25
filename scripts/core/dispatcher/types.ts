@@ -22,6 +22,7 @@ export interface DispatchAttemptInput {
   primaryProviderBinding: ProviderBinding;
   task: DispatchTask;
   attemptOrdinal: number;
+  abortSignal: AbortSignal;
 }
 
 export type DispatchLensPlanExecutor = (

@@ -21,11 +21,11 @@ const TERMINAL_ERROR_CODES = new Set<DispatchTerminalErrorCode>([
 ]);
 
 function normalizeErrorCode(value: string): DispatchTerminalErrorCode | null {
-  if (TERMINAL_ERROR_CODES.has(value as DispatchTerminalErrorCode)) {
-    return value as DispatchTerminalErrorCode;
-  }
-
   const normalized = value.toUpperCase();
+
+  if (TERMINAL_ERROR_CODES.has(normalized as DispatchTerminalErrorCode)) {
+    return normalized as DispatchTerminalErrorCode;
+  }
 
   if (
     normalized.includes("TIMEOUT") ||

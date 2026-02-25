@@ -42,20 +42,44 @@ export function sleepWithTimer(durationMs: number): Promise<void> {
   });
 }
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+export async function withTimeout<T>(
+  execute: (abortSignal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    const abortController = new AbortController();
+    let settled = false;
+
+    const settleResolve = (value: T): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+
+    const settleReject = (error: unknown): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    };
+
     const timer = setTimeout(() => {
-      reject(new DispatchAttemptTimeoutError(timeoutMs));
+      const timeoutError = new DispatchAttemptTimeoutError(timeoutMs);
+      abortController.abort(timeoutError);
+      settleReject(timeoutError);
     }, timeoutMs);
 
-    promise.then(
+    execute(abortController.signal).then(
       (value) => {
-        clearTimeout(timer);
-        resolve(value);
+        settleResolve(value);
       },
       (error) => {
-        clearTimeout(timer);
-        reject(error);
+        settleReject(error);
       },
     );
   });

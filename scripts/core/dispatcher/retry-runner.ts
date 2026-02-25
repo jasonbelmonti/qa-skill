@@ -19,12 +19,14 @@ export async function runDispatchTaskWithRetry(
   for (let attemptOrdinal = 0; attemptOrdinal < policy.maxAttempts; attemptOrdinal += 1) {
     try {
       const result = await withTimeout(
-        input.execute({
-          skillInput: input.skillInput,
-          primaryProviderBinding: input.primaryProviderBinding,
-          task: input.task,
-          attemptOrdinal,
-        }),
+        (abortSignal) =>
+          input.execute({
+            skillInput: input.skillInput,
+            primaryProviderBinding: input.primaryProviderBinding,
+            task: input.task,
+            attemptOrdinal,
+            abortSignal,
+          }),
         policy.timeoutMs,
       );
 
