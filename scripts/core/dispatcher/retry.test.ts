@@ -196,6 +196,16 @@ test("classifyDispatchError maps timeout/rate-limit/auth/unknown deterministical
     code: "ARTIFACT_SCHEMA_INVALID",
     retryable: false,
   });
+
+  expect(classifyDispatchError(errorWithRawCode("401"))).toMatchObject({
+    code: "PROVIDER_AUTH_ERROR",
+    retryable: false,
+  });
+
+  expect(classifyDispatchError(errorWithRawCode("403"))).toMatchObject({
+    code: "PROVIDER_AUTH_ERROR",
+    retryable: false,
+  });
 });
 
 test("runDispatchTaskWithRetry retries retriable errors and then succeeds", async () => {
@@ -337,6 +347,26 @@ test("runDispatchTaskWithRetry treats lowercase terminal schema code as non-retr
   expect(attemptsObserved).toEqual([0]);
   expect(run.terminalFailure).toBe(true);
   expect(run.result.errorCodes).toEqual(["ARTIFACT_SCHEMA_INVALID"]);
+});
+
+test("runDispatchTaskWithRetry treats 401 error code as non-retriable auth failure", async () => {
+  const task = buildTask();
+  const attemptsObserved: number[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a"),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      throw errorWithRawCode("401");
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0]);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_AUTH_ERROR"]);
 });
 
 test("runDispatchTaskWithRetry treats invalid executor payload as terminal schema error", async () => {

@@ -37,6 +37,9 @@ function normalizeErrorCode(value: string): DispatchTerminalErrorCode | null {
   if (normalized.includes("RATE_LIMIT") || normalized === "429") {
     return "PROVIDER_RATE_LIMIT";
   }
+  if (normalized === "401" || normalized === "403") {
+    return "PROVIDER_AUTH_ERROR";
+  }
   if (
     normalized.includes("AUTH") ||
     normalized.includes("UNAUTHORIZED") ||
