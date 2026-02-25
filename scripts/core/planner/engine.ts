@@ -207,10 +207,24 @@ function isValidExtensionToken(extension: string): boolean {
   return extension.length > 0 && !extension.includes("*") && !extension.includes("/");
 }
 
+function hasNonAsteriskWildcard(pattern: string): boolean {
+  return (
+    pattern.includes("?") ||
+    pattern.includes("[") ||
+    pattern.includes("]") ||
+    pattern.includes("{") ||
+    pattern.includes("}")
+  );
+}
+
 function classifyPattern(pattern: string): PatternKind {
   const normalizedPattern = normalizePath(pattern.trim());
 
   if (normalizedPattern.length === 0) {
+    return { kind: "unsupported" };
+  }
+
+  if (hasNonAsteriskWildcard(normalizedPattern)) {
     return { kind: "unsupported" };
   }
 

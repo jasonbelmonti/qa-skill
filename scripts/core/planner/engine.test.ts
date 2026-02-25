@@ -552,6 +552,41 @@ test("buildLensPlans rejects unsupported wildcard glob patterns deterministicall
   }
 });
 
+test("buildLensPlans rejects non-asterisk wildcard glob patterns deterministically", () => {
+  const registry = buildRegistry([
+    buildLens("unsupported-wildcard-core", "style", [
+      buildSubLens("bad-pattern", {
+        trigger: buildTrigger({
+          includeGlobs: ["src/?.ts", "foo/[ab].ts"],
+          minConfidence: 0.2,
+        }),
+      }),
+    ]),
+  ]);
+
+  const fixture = {
+    skillInput: buildSkillInput(),
+    registry,
+    selectedLensIds: ["unsupported-wildcard-core"],
+    changeSurface: buildChangeSurface([{ filePath: "src/a.ts", symbols: [] }]),
+    contextBounds: buildContextBounds(["src/a.ts"]),
+  };
+
+  expect(() => buildLensPlans(fixture)).toThrow(CliError);
+
+  try {
+    buildLensPlans(fixture);
+    throw new Error("Expected buildLensPlans to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(CliError);
+    const cliError = error as CliError;
+    expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(cliError.message).toContain("unsupported wildcard glob");
+    expect(cliError.message).toContain("src/?.ts");
+    expect(cliError.message).toContain("foo/[ab].ts");
+  }
+});
+
 test("buildLensPlans gates prefix scoring behind include/exclude matched files", () => {
   const registry = buildRegistry([
     buildLens("prefix-gate-core", "style", [
