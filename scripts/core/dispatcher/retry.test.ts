@@ -315,9 +315,15 @@ test("runDispatchTaskWithRetry maps attempt timeout to deterministic terminal co
     sleepMs: async (durationMs: number) => {
       sleepCalls.push(durationMs);
     },
-    execute: async () => {
-      return await new Promise<LensResult>(() => {
-        // Never resolve to exercise deterministic timeout path.
+    execute: async (attemptInput) => {
+      return await new Promise<LensResult>((_, reject) => {
+        attemptInput.abortSignal.addEventListener(
+          "abort",
+          () => {
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        );
       });
     },
   });
@@ -329,7 +335,7 @@ test("runDispatchTaskWithRetry maps attempt timeout to deterministic terminal co
   expect(validateSchema("lens-result.v1", run.result).valid).toBe(true);
 });
 
-test("runDispatchTaskWithRetry aborts timed-out attempts before retrying", async () => {
+test("runDispatchTaskWithRetry waits for timed-out attempt cleanup before retrying", async () => {
   const task = buildTask();
   let inFlight = 0;
   const attemptsObserved: number[] = [];
@@ -355,8 +361,10 @@ test("runDispatchTaskWithRetry aborts timed-out attempts before retrying", async
         attemptInput.abortSignal.addEventListener(
           "abort",
           () => {
-            inFlight -= 1;
-            reject(new Error("aborted"));
+            setTimeout(() => {
+              inFlight -= 1;
+              reject(new Error("aborted"));
+            }, 10);
           },
           { once: true },
         );
@@ -368,6 +376,27 @@ test("runDispatchTaskWithRetry aborts timed-out attempts before retrying", async
   expect(abortSignals[0]?.aborted).toBe(true);
   expect(run.terminalFailure).toBe(false);
   expect(run.result.status).toBe("completed");
+});
+
+test("runDispatchTaskWithRetry uses usage unavailable reason for provider usage failures", async () => {
+  const task = buildTask();
+  const attemptsObserved: number[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a"),
+    task,
+    sleepMs: async () => undefined,
+    execute: async (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      throw errorWithCode("PROVIDER_USAGE_UNAVAILABLE");
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0]);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_USAGE_UNAVAILABLE"]);
+  expect(run.result.usage.unavailableReason).toBe("MISSING_USAGE_DATA");
 });
 
 test("runDispatchTaskWithRetry treats lowercase terminal schema code as non-retriable", async () => {

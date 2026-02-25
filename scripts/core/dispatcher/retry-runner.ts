@@ -49,12 +49,18 @@ export async function runDispatchTaskWithRetry(
         continue;
       }
 
+      const usageUnavailableReason =
+        classification.code === "PROVIDER_USAGE_UNAVAILABLE"
+          ? "MISSING_USAGE_DATA"
+          : undefined;
+
       return {
         result: buildTerminalLensResult({
           skillInput: input.skillInput,
           task: input.task,
           attemptsUsed: attemptOrdinal + 1,
           classification,
+          usageUnavailableReason,
         }),
         attemptsUsed: attemptOrdinal + 1,
         terminalFailure: true,

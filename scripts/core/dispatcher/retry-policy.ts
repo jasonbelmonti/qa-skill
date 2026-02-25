@@ -49,6 +49,7 @@ export async function withTimeout<T>(
   return new Promise<T>((resolve, reject) => {
     const abortController = new AbortController();
     let settled = false;
+    let timeoutError: DispatchAttemptTimeoutError | null = null;
 
     const settleResolve = (value: T): void => {
       if (settled) {
@@ -69,9 +70,8 @@ export async function withTimeout<T>(
     };
 
     const timer = setTimeout(() => {
-      const timeoutError = new DispatchAttemptTimeoutError(timeoutMs);
+      timeoutError = new DispatchAttemptTimeoutError(timeoutMs);
       abortController.abort(timeoutError);
-      settleReject(timeoutError);
     }, timeoutMs);
 
     let executionPromise: Promise<T>;
@@ -84,9 +84,17 @@ export async function withTimeout<T>(
 
     executionPromise.then(
       (value) => {
+        if (timeoutError !== null) {
+          settleReject(timeoutError);
+          return;
+        }
         settleResolve(value);
       },
       (error) => {
+        if (timeoutError !== null) {
+          settleReject(timeoutError);
+          return;
+        }
         settleReject(error);
       },
     );
