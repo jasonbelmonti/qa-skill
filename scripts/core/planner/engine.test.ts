@@ -511,6 +511,64 @@ test("buildLensPlans rejects empty provider bindings deterministically", () => {
   }
 });
 
+test("buildLensPlans rejects selected lenses that define no sub-lenses", () => {
+  const fixture = buildInputFixture({
+    registry: buildRegistry([buildLens("empty-lens", "consistency", [])]),
+    selectedLensIds: ["empty-lens"],
+  });
+
+  expect(() => buildLensPlans(fixture)).toThrow(CliError);
+
+  try {
+    buildLensPlans(fixture);
+    throw new Error("Expected buildLensPlans to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(CliError);
+    const cliError = error as CliError;
+    expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(cliError.message).toContain("must define at least one subLens");
+  }
+});
+
+test("buildLensPlans picks a deterministic primary provider binding under tied identifiers", () => {
+  const bindingLarge = {
+    bindingId: "binding-tie",
+    adapterId: "openai-codex" as const,
+    adapterVersion: "2026-01-01",
+    modelId: "o4-mini",
+    temperature: 0 as const,
+    topP: 1 as const,
+    maxTokens: 9000,
+    seed: null,
+    timeoutMs: 60000,
+    retryMax: 2 as const,
+    retryBackoffMs: [500, 1500] as const,
+  };
+  const bindingSmall = {
+    ...bindingLarge,
+    maxTokens: 4000,
+  };
+
+  const forward = buildLensPlans(
+    buildInputFixture({
+      skillInput: buildSkillInput({
+        providerBindings: [bindingLarge, bindingSmall],
+      }),
+    }),
+  );
+  const reversed = buildLensPlans(
+    buildInputFixture({
+      skillInput: buildSkillInput({
+        providerBindings: [bindingSmall, bindingLarge],
+      }),
+    }),
+  );
+
+  expect(stableStringify(forward.lensPlans)).toBe(stableStringify(reversed.lensPlans));
+  expect(forward.lensPlans.every((plan) => plan.maxInputTokens === 4000)).toBe(true);
+  expect(forward.lensPlans.every((plan) => plan.maxOutputTokens === 4000)).toBe(true);
+});
+
 test("buildLensPlans falls back to default permission profile when lens default is missing", () => {
   const result = buildLensPlans(buildInputFixture());
   expect(result.lensPlans.every((plan) => plan.permissionProfileId === "read_only")).toBe(

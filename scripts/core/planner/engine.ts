@@ -96,6 +96,15 @@ function resolveSelectedLenses(
         path: `selectedLensIds[${index}]`,
         message: `unknown lensId (${lensId})`,
       });
+      return;
+    }
+
+    const lens = registry.lensesById[lensId];
+    if (lens.subLenses.length === 0) {
+      issues.push({
+        path: `selectedLensIds[${index}]`,
+        message: `lensId (${lensId}) must define at least one subLens`,
+      });
     }
   });
 
@@ -113,6 +122,34 @@ function resolveSelectedLenses(
     .sort((left, right) => compareText(left.lensId, right.lensId));
 }
 
+function compareNumbers(left: number, right: number): number {
+  return left - right;
+}
+
+function compareNullableNumbers(left: number | null, right: number | null): number {
+  if (left === right) {
+    return 0;
+  }
+  if (left === null) {
+    return -1;
+  }
+  if (right === null) {
+    return 1;
+  }
+  return compareNumbers(left, right);
+}
+
+function compareNumberArrays(left: readonly number[], right: readonly number[]): number {
+  const limit = Math.min(left.length, right.length);
+  for (let index = 0; index < limit; index += 1) {
+    const compared = compareNumbers(left[index]!, right[index]!);
+    if (compared !== 0) {
+      return compared;
+    }
+  }
+  return compareNumbers(left.length, right.length);
+}
+
 function resolvePrimaryProviderBinding(skillInput: SkillInput) {
   if (skillInput.providerBindings.length === 0) {
     throw new CliError(
@@ -126,7 +163,14 @@ function resolvePrimaryProviderBinding(skillInput: SkillInput) {
       compareText(left.bindingId, right.bindingId) ||
       compareText(left.adapterId, right.adapterId) ||
       compareText(left.adapterVersion, right.adapterVersion) ||
-      compareText(left.modelId, right.modelId)
+      compareText(left.modelId, right.modelId) ||
+      compareNumbers(left.maxTokens, right.maxTokens) ||
+      compareNumbers(left.timeoutMs, right.timeoutMs) ||
+      compareNullableNumbers(left.seed, right.seed) ||
+      compareNumbers(left.temperature, right.temperature) ||
+      compareNumbers(left.topP, right.topP) ||
+      compareNumbers(left.retryMax, right.retryMax) ||
+      compareNumberArrays(left.retryBackoffMs, right.retryBackoffMs)
     );
   })[0];
 }
