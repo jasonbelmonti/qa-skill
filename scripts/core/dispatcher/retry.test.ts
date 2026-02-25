@@ -263,6 +263,31 @@ test("runDispatchTaskWithRetry stops immediately on non-retriable auth errors", 
   expect(validateSchema("lens-result.v1", run.result).valid).toBe(true);
 });
 
+test("runDispatchTaskWithRetry handles synchronous executor throws deterministically", async () => {
+  const task = buildTask();
+  const sleepCalls: number[] = [];
+  const attemptsObserved: number[] = [];
+
+  const run = await runDispatchTaskWithRetry({
+    skillInput: buildSkillInput(),
+    primaryProviderBinding: buildProviderBinding("binding-a"),
+    task,
+    sleepMs: async (durationMs: number) => {
+      sleepCalls.push(durationMs);
+    },
+    execute: (attemptInput) => {
+      attemptsObserved.push(attemptInput.attemptOrdinal);
+      throw errorWithCode("PROVIDER_AUTH_ERROR");
+    },
+  });
+
+  expect(attemptsObserved).toEqual([0]);
+  expect(sleepCalls).toEqual([]);
+  expect(run.attemptsUsed).toBe(1);
+  expect(run.terminalFailure).toBe(true);
+  expect(run.result.errorCodes).toEqual(["PROVIDER_AUTH_ERROR"]);
+});
+
 test("runDispatchTaskWithRetry maps attempt timeout to deterministic terminal code", async () => {
   const task = buildTask();
   const sleepCalls: number[] = [];

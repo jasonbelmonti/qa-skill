@@ -74,7 +74,15 @@ export async function withTimeout<T>(
       settleReject(timeoutError);
     }, timeoutMs);
 
-    execute(abortController.signal).then(
+    let executionPromise: Promise<T>;
+    try {
+      executionPromise = execute(abortController.signal);
+    } catch (error) {
+      settleReject(error);
+      return;
+    }
+
+    executionPromise.then(
       (value) => {
         settleResolve(value);
       },
