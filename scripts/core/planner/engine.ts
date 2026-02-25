@@ -274,7 +274,7 @@ function matchFilesForTrigger(
 }
 
 function hasPrefixSignal(
-  selectedContextFiles: readonly string[],
+  candidateFiles: readonly string[],
   pathPrefixes: readonly string[],
 ): boolean {
   const normalizedPrefixes = sortedUnique(pathPrefixes.map(normalizePrefix)).filter(
@@ -285,7 +285,7 @@ function hasPrefixSignal(
     return false;
   }
 
-  return selectedContextFiles.some((filePath) =>
+  return candidateFiles.some((filePath) =>
     normalizedPrefixes.some((prefix) => matchesPathPrefix(filePath, prefix)),
   );
 }
@@ -373,10 +373,7 @@ function evaluateSubLens(
 ): EvaluatedSubLens {
   const matchedFiles = matchFilesForTrigger(selectedContextFiles, subLens.trigger);
   const fileMatchSignal: 0 | 0.6 = matchedFiles.length > 0 ? 0.6 : 0;
-  const prefixSignal: 0 | 0.2 = hasPrefixSignal(
-    selectedContextFiles,
-    subLens.trigger.pathPrefixes,
-  )
+  const prefixSignal: 0 | 0.2 = hasPrefixSignal(matchedFiles, subLens.trigger.pathPrefixes)
     ? 0.2
     : 0;
   const symbolSignal: 0 | 0.2 = hasSymbolSignal(

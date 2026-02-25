@@ -491,6 +491,36 @@ test("buildLensPlans uses broad deterministic fallback when no sub-lens meets co
   expect(result.diagnostics.every((diagnostic) => diagnostic.broadFallback)).toBe(true);
 });
 
+test("buildLensPlans gates prefix scoring behind include/exclude matched files", () => {
+  const registry = buildRegistry([
+    buildLens("prefix-gate-core", "style", [
+      buildSubLens("sub-a", {
+        trigger: buildTrigger({
+          includeGlobs: ["**/*.ts"],
+          excludeGlobs: ["src/**"],
+          pathPrefixes: ["src/"],
+          minConfidence: 0.2,
+        }),
+      }),
+    ]),
+  ]);
+
+  const result = buildLensPlans({
+    skillInput: buildSkillInput(),
+    registry,
+    selectedLensIds: ["prefix-gate-core"],
+    changeSurface: buildChangeSurface([{ filePath: "src/app.ts", symbols: [] }]),
+    contextBounds: buildContextBounds(["src/app.ts"]),
+  });
+
+  expect(result.warningCodes).toEqual(["PLAN_CONFIDENCE_LOW_BROAD_SCAN"]);
+  expect(result.lensPlans.map((plan) => plan.subLensId)).toEqual(["sub-a"]);
+  expect(result.lensPlans[0]?.changedFiles).toEqual(["src/app.ts"]);
+  expect(result.diagnostics[0]?.prefixSignal).toBe(0);
+  expect(result.diagnostics[0]?.score).toBe(0);
+  expect(result.diagnostics[0]?.broadFallback).toBe(true);
+});
+
 test("buildLensPlans rejects empty provider bindings deterministically", () => {
   const fixture = buildInputFixture({
     skillInput: buildSkillInput({
