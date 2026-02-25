@@ -459,6 +459,33 @@ test("buildLensPlans selects only sub-lenses meeting deterministic confidence th
   ]);
 });
 
+test("buildLensPlans supports prefix/**/*.ext include globs", () => {
+  const registry = buildRegistry([
+    buildLens("glob-core", "consistency", [
+      buildSubLens("prefix-ext", {
+        trigger: buildTrigger({
+          includeGlobs: ["src/**/*.ts"],
+          pathPrefixes: [],
+          symbolHints: [],
+          minConfidence: 0.6,
+        }),
+      }),
+    ]),
+  ]);
+
+  const result = buildLensPlans({
+    skillInput: buildSkillInput(),
+    registry,
+    selectedLensIds: ["glob-core"],
+    changeSurface: buildChangeSurface([{ filePath: "src/features/app.ts", symbols: [] }]),
+    contextBounds: buildContextBounds(["src/features/app.ts"]),
+  });
+
+  expect(result.warningCodes).toEqual([]);
+  expect(result.lensPlans.map((plan) => plan.subLensId)).toEqual(["prefix-ext"]);
+  expect(result.lensPlans[0]?.changedFiles).toEqual(["src/features/app.ts"]);
+});
+
 test("buildLensPlans uses broad deterministic fallback when no sub-lens meets confidence", () => {
   const registry = buildRegistry([
     buildLens("fallback-core", "style", [
@@ -489,6 +516,40 @@ test("buildLensPlans uses broad deterministic fallback when no sub-lens meets co
   expect(result.lensPlans.map((plan) => plan.subLensId)).toEqual(["sub-a", "sub-b"]);
   expect(result.lensPlans.every((plan) => plan.changedFiles.length === 0)).toBe(true);
   expect(result.diagnostics.every((diagnostic) => diagnostic.broadFallback)).toBe(true);
+});
+
+test("buildLensPlans rejects unsupported wildcard glob patterns deterministically", () => {
+  const registry = buildRegistry([
+    buildLens("unsupported-glob-core", "style", [
+      buildSubLens("bad-pattern", {
+        trigger: buildTrigger({
+          includeGlobs: ["src/**/foo/*.ts"],
+          minConfidence: 0.2,
+        }),
+      }),
+    ]),
+  ]);
+
+  const fixture = {
+    skillInput: buildSkillInput(),
+    registry,
+    selectedLensIds: ["unsupported-glob-core"],
+    changeSurface: buildChangeSurface([{ filePath: "src/foo.ts", symbols: [] }]),
+    contextBounds: buildContextBounds(["src/foo.ts"]),
+  };
+
+  expect(() => buildLensPlans(fixture)).toThrow(CliError);
+
+  try {
+    buildLensPlans(fixture);
+    throw new Error("Expected buildLensPlans to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(CliError);
+    const cliError = error as CliError;
+    expect(cliError.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(cliError.message).toContain("unsupported wildcard glob");
+    expect(cliError.message).toContain("src/**/foo/*.ts");
+  }
 });
 
 test("buildLensPlans gates prefix scoring behind include/exclude matched files", () => {

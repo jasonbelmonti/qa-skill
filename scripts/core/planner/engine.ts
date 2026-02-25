@@ -33,6 +33,14 @@ interface EvaluatedSubLens {
   broadFallback: boolean;
 }
 
+type PatternKind =
+  | { kind: "exact"; path: string }
+  | { kind: "prefixRecursive"; prefix: string }
+  | { kind: "extensionAnyDepth"; extension: string }
+  | { kind: "extensionBaseName"; extension: string }
+  | { kind: "prefixExtensionAnyDepth"; prefix: string; extension: string }
+  | { kind: "unsupported" };
+
 function compareText(left: string, right: string): number {
   if (left < right) {
     return -1;
@@ -195,38 +203,119 @@ function matchesExtension(target: string, extension: string): boolean {
   return target.toLowerCase().endsWith(`.${normalizedExtension}`);
 }
 
-function matchesSupportedPattern(filePath: string, pattern: string): boolean {
-  const normalizedPath = normalizePath(filePath);
+function isValidExtensionToken(extension: string): boolean {
+  return extension.length > 0 && !extension.includes("*") && !extension.includes("/");
+}
+
+function classifyPattern(pattern: string): PatternKind {
   const normalizedPattern = normalizePath(pattern.trim());
 
   if (normalizedPattern.length === 0) {
-    return false;
-  }
-
-  if (normalizedPattern.endsWith("/**")) {
-    const prefix = normalizePrefix(normalizedPattern.slice(0, -3));
-    if (prefix.length === 0) {
-      return true;
-    }
-
-    return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`);
-  }
-
-  if (normalizedPattern.startsWith("**/*.")) {
-    return matchesExtension(normalizedPath, normalizedPattern.slice(5));
-  }
-
-  if (normalizedPattern.startsWith("*.")) {
-    const fileName = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
-    return matchesExtension(fileName, normalizedPattern.slice(2));
+    return { kind: "unsupported" };
   }
 
   if (!normalizedPattern.includes("*")) {
-    return normalizedPath === normalizedPattern;
+    return { kind: "exact", path: normalizedPattern };
   }
 
-  // Unsupported wildcard forms are treated as exact values in v0.
-  return normalizedPath === normalizedPattern;
+  if (normalizedPattern.endsWith("/**")) {
+    const rawPrefix = normalizedPattern.slice(0, -3);
+    const prefix = normalizePrefix(rawPrefix);
+    if (prefix.length > 0 && !rawPrefix.includes("*")) {
+      return { kind: "prefixRecursive", prefix };
+    }
+    return { kind: "unsupported" };
+  }
+
+  if (normalizedPattern.startsWith("**/*.")) {
+    const extension = normalizedPattern.slice(5);
+    if (isValidExtensionToken(extension)) {
+      return { kind: "extensionAnyDepth", extension };
+    }
+    return { kind: "unsupported" };
+  }
+
+  if (normalizedPattern.startsWith("*.")) {
+    const extension = normalizedPattern.slice(2);
+    if (isValidExtensionToken(extension)) {
+      return { kind: "extensionBaseName", extension };
+    }
+    return { kind: "unsupported" };
+  }
+
+  const marker = "/**/*.";
+  const markerIndex = normalizedPattern.indexOf(marker);
+  if (markerIndex > 0 && normalizedPattern.indexOf(marker, markerIndex + 1) === -1) {
+    const rawPrefix = normalizedPattern.slice(0, markerIndex);
+    const prefix = normalizePrefix(rawPrefix);
+    const extension = normalizedPattern.slice(markerIndex + marker.length);
+    if (prefix.length > 0 && !rawPrefix.includes("*") && isValidExtensionToken(extension)) {
+      return { kind: "prefixExtensionAnyDepth", prefix, extension };
+    }
+    return { kind: "unsupported" };
+  }
+
+  return { kind: "unsupported" };
+}
+
+function matchesSupportedPattern(filePath: string, pattern: string): boolean {
+  const normalizedPath = normalizePath(filePath);
+  const classified = classifyPattern(pattern);
+
+  if (classified.kind === "exact") {
+    return normalizedPath === classified.path;
+  }
+
+  if (classified.kind === "prefixRecursive") {
+    return normalizedPath === classified.prefix || normalizedPath.startsWith(`${classified.prefix}/`);
+  }
+
+  if (classified.kind === "extensionAnyDepth") {
+    return matchesExtension(normalizedPath, classified.extension);
+  }
+
+  if (classified.kind === "extensionBaseName") {
+    const fileName = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
+    return matchesExtension(fileName, classified.extension);
+  }
+
+  if (classified.kind === "prefixExtensionAnyDepth") {
+    return (
+      (normalizedPath === classified.prefix || normalizedPath.startsWith(`${classified.prefix}/`)) &&
+      matchesExtension(normalizedPath, classified.extension)
+    );
+  }
+
+  return false;
+}
+
+function collectUnsupportedGlobIssues(selectedLenses: readonly LensDefinition[]): PlannerIssue[] {
+  const issues: PlannerIssue[] = [];
+
+  for (const lens of selectedLenses) {
+    for (const subLens of [...lens.subLenses].sort((left, right) => compareText(left.subLensId, right.subLensId))) {
+      const triggerSets = [
+        { label: "includeGlobs", values: subLens.trigger.includeGlobs },
+        { label: "excludeGlobs", values: subLens.trigger.excludeGlobs },
+      ] as const;
+
+      for (const triggerSet of triggerSets) {
+        triggerSet.values.forEach((pattern, index) => {
+          if (classifyPattern(pattern).kind !== "unsupported") {
+            return;
+          }
+
+          issues.push({
+            path: `lensId=${lens.lensId}.subLensId=${subLens.subLensId}.trigger.${triggerSet.label}[${index}]`,
+            message:
+              `unsupported wildcard glob (${pattern}); supported forms are exact path, *.ext, **/*.ext, prefix/**, and prefix/**/*.ext`,
+          });
+        });
+      }
+    }
+  }
+
+  return issues;
 }
 
 function matchesPathPrefix(filePath: string, prefix: string): boolean {
@@ -434,6 +523,13 @@ function toDiagnostic(evaluation: EvaluatedSubLens): PlannerDiagnostic {
 
 export function buildLensPlans(input: BuildLensPlansInput): BuildLensPlansResult {
   const selectedLenses = resolveSelectedLenses(input.registry, input.selectedLensIds);
+  const unsupportedGlobIssues = collectUnsupportedGlobIssues(selectedLenses);
+  if (unsupportedGlobIssues.length > 0) {
+    throw new CliError(
+      "CONFIG_VALIDATION_ERROR",
+      formatPlannerIssues(unsupportedGlobIssues.sort(comparePlannerIssues)),
+    );
+  }
   const primaryBinding = resolvePrimaryProviderBinding(input.skillInput);
 
   const changeSurfaceFileByPath = new Map<string, ChangeSurfaceFile>();
