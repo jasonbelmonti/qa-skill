@@ -62,6 +62,9 @@ export interface SkillInput {
   headRef: string;
   runMode: RunMode;
   requestedLensIds: string[] | null;
+  includeGlobs: string[] | null;
+  excludeGlobs: string[] | null;
+  explicitFiles: string[] | null;
   maxConcurrency: number;
   allowExecutionLensClasses: LensClass[];
   permissionProfiles: PermissionProfile[];

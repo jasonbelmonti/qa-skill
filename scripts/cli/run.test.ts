@@ -486,6 +486,41 @@ test("qa:run returns validation error for invalid config values", async () => {
   });
 });
 
+test("qa:run returns deterministic validation errors for invalid targeting entries", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPathA = join(tempDir, "run-a");
+    const outPathB = join(tempDir, "run-b");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          includeGlobs: ["src/**/*.ts", ""],
+          excludeGlobs: ["**/*.tmp", 5],
+          explicitFiles: [null],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = runQa(["--config", configPath, "--out", outPathA]);
+    const second = runQa(["--config", configPath, "--out", outPathB]);
+    expect(first.exitCode).toBe(3);
+    expect(second.exitCode).toBe(3);
+
+    const firstPayload = parseLastJsonLine(first.stdout);
+    const secondPayload = parseLastJsonLine(second.stdout);
+    expect(firstPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(secondPayload.code).toBe("CONFIG_VALIDATION_ERROR");
+    expect(firstPayload.message).toBe(secondPayload.message);
+    expect(firstPayload.message).toContain("/excludeGlobs/1");
+    expect(firstPayload.message).toContain("/explicitFiles/0");
+    expect(firstPayload.message).toContain("/includeGlobs/1");
+  });
+});
+
 test("qa:run returns validation error for non-positive maxConcurrency", async () => {
   await withTempDir(async (tempDir) => {
     const configPath = join(tempDir, "config.json");
@@ -645,6 +680,37 @@ test("qa:run accepts valid requestedLensIds subset with deterministic selected o
     expect(await readFile(resolve(outPath, "input.normalized.json"), "utf8")).toContain(
       '"requestedLensIds": [',
     );
+  });
+});
+
+test("qa:run preserves targeting fields in normalized artifact", async () => {
+  await withTempDir(async (tempDir) => {
+    const configPath = join(tempDir, "config.json");
+    const outPath = join(tempDir, "run-a");
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          baseRef: "HEAD",
+          includeGlobs: ["src/**/*.ts"],
+          excludeGlobs: ["**/*.snap.ts"],
+          explicitFiles: ["README.md"],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = runQa(["--config", configPath, "--out", outPath]);
+    expect(result.exitCode).toBe(0);
+
+    const artifact = JSON.parse(
+      await readFile(resolve(outPath, "input.normalized.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(artifact.includeGlobs).toEqual(["src/**/*.ts"]);
+    expect(artifact.excludeGlobs).toEqual(["**/*.snap.ts"]);
+    expect(artifact.explicitFiles).toEqual(["README.md"]);
   });
 });
 

@@ -7,11 +7,38 @@ import {
   getRegisteredSchemaKeys,
   type SchemaKey,
 } from "./registry";
-import { assertSchema, validateSchema } from "./validate";
+import {
+  assertSchema,
+  type NormalizedValidationError,
+  validateSchema,
+} from "./validate";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
 const HASH_C = "c".repeat(64);
+
+function compareText(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
+function compareValidationErrors(
+  left: NormalizedValidationError,
+  right: NormalizedValidationError,
+): number {
+  return (
+    compareText(left.instancePath, right.instancePath) ||
+    compareText(left.keyword, right.keyword) ||
+    compareText(left.schemaPath, right.schemaPath) ||
+    compareText(left.params, right.params) ||
+    compareText(left.message, right.message)
+  );
+}
 
 function buildUsageMetrics() {
   return {
@@ -164,6 +191,9 @@ function buildSkillInput() {
     headRef: "HEAD",
     runMode: "strict",
     requestedLensIds: null,
+    includeGlobs: null,
+    excludeGlobs: null,
+    explicitFiles: null,
     maxConcurrency: 4,
     allowExecutionLensClasses: [],
     permissionProfiles: [buildPermissionProfile()],
@@ -258,6 +288,9 @@ function buildQaRunConfig() {
     schemaVersion: "qa-run-config.v1",
     repoRoot: ".",
     runMode: "strict",
+    includeGlobs: ["src/**/*.ts"],
+    excludeGlobs: ["**/*.spec.ts"],
+    explicitFiles: ["README.md"],
     maxConcurrency: 4,
     runBudgetMaxCostUsd: null,
     permissionProfiles: [buildPermissionProfile()],
@@ -364,6 +397,30 @@ test("validateSchema rejects non-integer and negative usage token counts", () =>
   expect(paths).toContain("/usage/inputTokens");
   expect(paths).toContain("/usage/outputTokens");
   expect(paths).toContain("/usage/totalTokens");
+});
+
+test("validateSchema rejects invalid targeting entries with deterministic ordering", () => {
+  const sparseExplicitFiles = new Array(1) as string[];
+
+  const invalidConfig = {
+    schemaVersion: "qa-run-config.v1",
+    includeGlobs: ["", "src/**/*.ts"],
+    excludeGlobs: ["**/*.tmp", 1],
+    explicitFiles: sparseExplicitFiles,
+  };
+
+  const first = validateSchema("qa-run-config.v1", invalidConfig);
+  const second = validateSchema("qa-run-config.v1", invalidConfig);
+
+  expect(first).toEqual(second);
+  expect(first.valid).toBe(false);
+
+  expect(first.errors).toEqual([...first.errors].sort(compareValidationErrors));
+
+  const paths = first.errors.map((error) => error.instancePath);
+  expect(paths).toContain("/includeGlobs/0");
+  expect(paths).toContain("/excludeGlobs/1");
+  expect(paths).toContain("/explicitFiles/0");
 });
 
 function loadJsonFixture(relativePath: string): unknown {

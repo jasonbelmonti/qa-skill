@@ -107,6 +107,9 @@ test("normalizeConfigToSkillInput applies deterministic defaults", async () => {
       headRef: "HEAD",
       runMode: "strict",
       requestedLensIds: null,
+      includeGlobs: null,
+      excludeGlobs: null,
+      explicitFiles: null,
       maxConcurrency: 4,
       allowExecutionLensClasses: [],
       defaultPermissionProfileId: "read_only",
@@ -154,6 +157,30 @@ test("normalizeConfigToSkillInput preserves explicit null cost budget", async ()
     );
 
     expect(normalized.runBudgetMaxCostUsd).toBeNull();
+  });
+});
+
+test("normalizeConfigToSkillInput preserves targeting fields in stable input order", async () => {
+  await withTempDir(async (testDir) => {
+    const config: QaRunConfigV1 = {
+      includeGlobs: ["src/**/*.ts", "docs/**/*.md"],
+      excludeGlobs: ["**/*.snap.ts"],
+      explicitFiles: ["README.md", "scripts/cli/run.ts"],
+    };
+
+    const normalized = await normalizeConfigToSkillInput(
+      config,
+      createNormalizeOptions(testDir, {
+        getOriginRemoteUrl: async () => null,
+      }),
+    );
+
+    expect(normalized.includeGlobs).toEqual(["src/**/*.ts", "docs/**/*.md"]);
+    expect(normalized.excludeGlobs).toEqual(["**/*.snap.ts"]);
+    expect(normalized.explicitFiles).toEqual([
+      "README.md",
+      "scripts/cli/run.ts",
+    ]);
   });
 });
 
