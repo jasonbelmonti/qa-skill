@@ -43,6 +43,48 @@
         }
       ]
     },
+    "includeGlobs": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "excludeGlobs": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "explicitFiles": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "maxConcurrency": {
       "type": "integer",
       "minimum": 1
@@ -93,6 +135,9 @@
     "headRef",
     "runMode",
     "requestedLensIds",
+    "includeGlobs",
+    "excludeGlobs",
+    "explicitFiles",
     "maxConcurrency",
     "allowExecutionLensClasses",
     "permissionProfiles",

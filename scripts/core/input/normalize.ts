@@ -17,7 +17,10 @@ import { assertSchema } from "../schema/validate";
 import {
   DEFAULT_ARTIFACT_ROOT,
   DEFAULT_BASE_REF,
+  DEFAULT_EXCLUDE_GLOBS,
+  DEFAULT_EXPLICIT_FILES,
   DEFAULT_HEAD_REF,
+  DEFAULT_INCLUDE_GLOBS,
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_PERMISSION_PROFILE_ID,
   DEFAULT_READ_ONLY_PERMISSION_PROFILE,
@@ -62,6 +65,14 @@ function cloneProviderBinding(binding: ProviderBinding): ProviderBinding {
     retryMax: 2,
     retryBackoffMs: [500, 1500],
   };
+}
+
+function copyOptionalStringList(value: string[] | null | undefined): string[] | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return [...value];
 }
 
 function normalizeRemotePath(pathValue: string): string | null {
@@ -261,7 +272,15 @@ export async function normalizeConfigForRun(
     baseRef: baseRefResolution.resolvedBaseRef,
     headRef: config.headRef ?? DEFAULT_HEAD_REF,
     runMode: config.runMode ?? DEFAULT_RUN_MODE,
-    requestedLensIds: config.requestedLensIds ?? DEFAULT_REQUESTED_LENS_IDS,
+    requestedLensIds:
+      copyOptionalStringList(config.requestedLensIds) ??
+      DEFAULT_REQUESTED_LENS_IDS,
+    includeGlobs:
+      copyOptionalStringList(config.includeGlobs) ?? DEFAULT_INCLUDE_GLOBS,
+    excludeGlobs:
+      copyOptionalStringList(config.excludeGlobs) ?? DEFAULT_EXCLUDE_GLOBS,
+    explicitFiles:
+      copyOptionalStringList(config.explicitFiles) ?? DEFAULT_EXPLICIT_FILES,
     maxConcurrency: config.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     allowExecutionLensClasses:
       (config.allowExecutionLensClasses as LensClass[] | undefined) ?? [],

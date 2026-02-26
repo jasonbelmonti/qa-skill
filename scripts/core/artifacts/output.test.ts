@@ -31,6 +31,9 @@ function buildSkillInput(): SkillInput {
     headRef: "HEAD",
     runMode: "strict",
     requestedLensIds: null,
+    includeGlobs: null,
+    excludeGlobs: null,
+    explicitFiles: null,
     maxConcurrency: 4,
     allowExecutionLensClasses: [],
     permissionProfiles: [
